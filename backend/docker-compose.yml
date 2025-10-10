@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # 后端API服务
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - esports-network
+
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: esports_simulator
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - esports-network
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - esports-network
+
+  # 数据库管理工具（可选）
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - esports-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  esports-network:
+    driver: bridge
