@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { logger } from '@/utils/logger';
 
 export interface AppError extends Error {
@@ -22,8 +22,7 @@ export class CustomError extends Error implements AppError {
 export const errorHandler = (
   error: AppError,
   req: Request,
-  res: Response,
-  _next?: NextFunction
+  res: Response
 ): void => {
   const { statusCode = 500, message, stack } = error;
 

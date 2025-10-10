@@ -37,7 +37,7 @@ export class CompetitionRepository {
 
   // 根据ID获取赛事
   async findById(id: string, options?: QueryOptions): Promise<Competition | null> {
-    let query = `
+    const query = `
       SELECT c.*, s.name as season_name, s.year as season_year
       FROM competitions c
       LEFT JOIN seasons s ON c.season_id = s.id

@@ -2,7 +2,7 @@
 // 电竞赛事模拟系统 - 数据库服务
 // =================================================================
 
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { logger } from '../utils/logger';
 import { config } from '../config/config';
 
@@ -32,7 +32,7 @@ export class DatabaseService {
   }
 
   // 执行查询
-  async query(text: string, params?: any[]): Promise<QueryResult> {
+  async query<T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
     const start = Date.now();
     try {
       const result = await this.pool.query(text, params);

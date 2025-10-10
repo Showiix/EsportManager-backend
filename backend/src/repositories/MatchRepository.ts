@@ -43,7 +43,7 @@ export class MatchRepository {
 
   // 根据ID获取比赛
   async findById(id: string, options?: QueryOptions): Promise<Match | null> {
-    let query = `
+    const query = `
       SELECT
         m.*,
         ta.name as team_a_name,
@@ -432,7 +432,7 @@ export class MatchRepository {
       return [];
     }
 
-    const values = matches.map((match, index) => {
+    const values = matches.map((_match, index) => {
       const baseIndex = index * 15;
       return `(
         $${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5},

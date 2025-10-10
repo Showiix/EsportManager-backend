@@ -191,7 +191,8 @@ export class TeamService {
   // 获取战队比赛历史
   async getTeamMatches(teamId: string, limit?: number): Promise<any[]> {
     try {
-      const team = await this.getTeamById(teamId);
+      // 验证团队存在性
+      await this.getTeamById(teamId);
       return await this.teamRepository.getTeamMatches(teamId, limit);
     } catch (error) {
       logger.error('Failed to get team matches:', { teamId, error });
@@ -272,7 +273,7 @@ export class TeamService {
 
     const { teams } = await this.getTeams({ filter, pagination: { limit: 1 } });
 
-    if (teams.length > 0 && teams[0].id !== excludeId) {
+    if (teams && teams.length > 0 && teams[0].id !== excludeId) {
       throw new BusinessError(
         ErrorCodes.TEAM_NOT_FOUND, // 暂时复用错误码，实际应该用TEAM_NAME_DUPLICATE
         `Team name "${name}" already exists in this region`

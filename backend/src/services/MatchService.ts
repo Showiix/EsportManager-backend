@@ -381,7 +381,6 @@ export class MatchService {
     }
 
     if (resultData.winnerId && resultData.scoreA !== undefined && resultData.scoreB !== undefined) {
-      const winnerShouldBe = resultData.scoreA > resultData.scoreB ? 'teamA' : 'teamB';
       // 这里需要更复杂的验证逻辑，暂时简化
     }
   }

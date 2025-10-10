@@ -30,7 +30,7 @@ export class TeamRepository {
 
   // 根据ID获取战队
   async findById(id: string, options?: QueryOptions): Promise<Team | null> {
-    let query = `
+    const query = `
       SELECT t.*, r.name as region_name, r.code as region_code
       FROM teams t
       LEFT JOIN regions r ON t.region_id = r.id
