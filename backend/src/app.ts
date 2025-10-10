@@ -25,17 +25,21 @@ class App {
     this.app.use(helmet());
 
     // CORS配置
-    this.app.use(cors({
-      origin: config.cors.origin,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
-    }));
+    this.app.use(
+      cors({
+        origin: config.cors.origin,
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+      })
+    );
 
     // 请求日志
-    this.app.use(morgan('combined', {
-      stream: { write: (message: string) => logger.info(message.trim()) }
-    }));
+    this.app.use(
+      morgan('combined', {
+        stream: { write: (message: string) => logger.info(message.trim()) },
+      })
+    );
 
     // 压缩响应
     this.app.use(compression());
@@ -49,8 +53,8 @@ class App {
       windowMs: 15 * 60 * 1000, // 15分钟
       max: 100, // 每个IP最多100个请求
       message: {
-        error: 'Too many requests from this IP, please try again later.'
-      }
+        error: 'Too many requests from this IP, please try again later.',
+      },
     });
     this.app.use('/api', limiter);
 
@@ -60,7 +64,7 @@ class App {
         status: 'OK',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
-        environment: config.env
+        environment: config.env,
       });
     });
   }
@@ -74,7 +78,7 @@ class App {
       res.json({
         message: 'Esports Simulator API',
         version: '1.0.0',
-        documentation: '/api/docs'
+        documentation: '/api/docs',
       });
     });
   }

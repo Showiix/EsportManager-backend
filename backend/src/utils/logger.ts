@@ -23,23 +23,25 @@ export const logger = winston.createLogger({
   format: logFormat,
   transports: [
     new winston.transports.Console({
-      format: config.env === 'development' ? consoleFormat : logFormat
+      format: config.env === 'development' ? consoleFormat : logFormat,
     }),
     new winston.transports.File({
       filename: 'logs/error.log',
       level: 'error',
-      format: logFormat
+      format: logFormat,
     }),
     new winston.transports.File({
       filename: 'logs/combined.log',
-      format: logFormat
-    })
-  ]
+      format: logFormat,
+    }),
+  ],
 });
 
 // 在开发环境下添加额外的日志输出
 if (config.env === 'development') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple()
-  }));
+  logger.add(
+    new winston.transports.Console({
+      format: winston.format.simple(),
+    })
+  );
 }

@@ -23,7 +23,6 @@ async function bootstrap() {
     // 启动Express应用
     const app = new App();
     app.listen();
-
   } catch (error) {
     logger.error('❌ Failed to start server:', error);
     process.exit(1);
@@ -46,7 +45,7 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', error => {
   logger.error('Uncaught Exception:', error);
   process.exit(1);
 });

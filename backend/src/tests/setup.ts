@@ -1,5 +1,4 @@
 // 测试环境设置
-import { config } from '@/config/config';
 import { logger } from '@/utils/logger';
 
 // 设置测试环境
@@ -20,6 +19,6 @@ process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', error => {
   logger.error('Uncaught Exception:', error);
 });

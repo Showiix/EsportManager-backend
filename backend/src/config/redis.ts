@@ -24,7 +24,7 @@ class RedisConnection {
       logger.info('Redis client ready');
     });
 
-    this.client.on('error', (err) => {
+    this.client.on('error', err => {
       logger.error('Redis client error:', err);
     });
 
@@ -71,12 +71,21 @@ class RedisConnection {
     }
   }
 
-  public async del(key: string): Promise<void> {
+  public async del(...keys: string[]): Promise<void> {
     try {
-      await this.client.del(key);
+      await this.client.del(keys);
     } catch (error) {
-      logger.error('Redis DEL error:', { key, error });
+      logger.error('Redis DEL error:', { keys, error });
       throw error;
+    }
+  }
+
+  public async keys(pattern: string): Promise<string[]> {
+    try {
+      return await this.client.keys(pattern);
+    } catch (error) {
+      logger.error('Redis KEYS error:', { pattern, error });
+      return [];
     }
   }
 
@@ -108,6 +117,7 @@ class RedisConnection {
 }
 
 export const redis = new RedisConnection();
+export const redisService = redis;
 
 export const connectRedis = async (): Promise<void> => {
   await redis.connect();

@@ -12,8 +12,8 @@ router.get('/', (req, res) => {
       competitions: '/api/competitions',
       matches: '/api/matches',
       statistics: '/api/statistics',
-      health: '/health'
-    }
+      health: '/health',
+    },
   });
 });
 

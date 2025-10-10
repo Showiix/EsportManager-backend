@@ -23,7 +23,7 @@ class DatabaseConnection {
       logger.info('New PostgreSQL client connected');
     });
 
-    this.pool.on('error', (err) => {
+    this.pool.on('error', err => {
       logger.error('PostgreSQL pool error:', err);
     });
   }
@@ -39,7 +39,7 @@ class DatabaseConnection {
     }
   }
 
-  public async query(text: string, params?: any[]): Promise<any> {
+  public async query(text: string, params?: unknown[]): Promise<any> {
     const start = Date.now();
     try {
       const result = await this.pool.query(text, params);

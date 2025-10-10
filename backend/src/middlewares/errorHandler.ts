@@ -23,7 +23,7 @@ export const errorHandler = (
   error: AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next?: NextFunction
 ): void => {
   const { statusCode = 500, message, stack } = error;
 
@@ -34,16 +34,16 @@ export const errorHandler = (
     url: req.url,
     method: req.method,
     ip: req.ip,
-    userAgent: req.get('User-Agent')
+    userAgent: req.get('User-Agent'),
   });
 
   const errorResponse = {
     success: false,
     error: {
       code: statusCode,
-      message: statusCode === 500 ? 'Internal Server Error' : message
+      message: statusCode === 500 ? 'Internal Server Error' : message,
     },
-    ...(process.env.NODE_ENV === 'development' && { stack })
+    ...(process.env.NODE_ENV === 'development' && { stack }),
   };
 
   res.status(statusCode).json(errorResponse);

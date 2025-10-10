@@ -5,7 +5,7 @@ export const notFoundHandler = (req: Request, res: Response): void => {
     success: false,
     error: {
       code: 404,
-      message: `Route ${req.method} ${req.originalUrl} not found`
-    }
+      message: `Route ${req.method} ${req.originalUrl} not found`,
+    },
   });
 };
