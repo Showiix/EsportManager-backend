@@ -4,6 +4,7 @@
 
 import { CompetitionRepository } from '../repositories/CompetitionRepository';
 import { TeamRepository } from '../repositories/TeamRepository';
+import { MatchRepository } from '../repositories/MatchRepository';
 import { CompetitionEngine } from '../engines/CompetitionEngine';
 import {
   Competition,
@@ -22,12 +23,14 @@ import { logger } from '../utils/logger';
 export class CompetitionService {
   private competitionRepository: CompetitionRepository;
   private teamRepository: TeamRepository;
+  private matchRepository: MatchRepository;
   private competitionEngine: CompetitionEngine;
   private cachePrefix = 'competition';
 
   constructor() {
     this.competitionRepository = new CompetitionRepository();
     this.teamRepository = new TeamRepository();
+    this.matchRepository = new MatchRepository();
     this.competitionEngine = new CompetitionEngine();
   }
 
@@ -354,16 +357,30 @@ export class CompetitionService {
         }
       );
 
-      // 这里应该将matches保存到数据库
-      // 暂时返回生成的matches
+      // 批量保存比赛到数据库
+      const createdMatches = await this.matchRepository.createBatch(
+        matches.map(match => ({
+          ...match,
+          id: undefined as any // 让数据库生成ID
+        }))
+      );
 
-      logger.info('Schedule generated successfully', {
+      // 更新赛事状态为活跃
+      await this.updateCompetitionStatus(competitionId, CompetitionStatus.ACTIVE);
+
+      // 清除相关缓存
+      await this.invalidateCache([
+        `${this.cachePrefix}:${competitionId}:*`,
+        `match:competition:${competitionId}:*`
+      ]);
+
+      logger.info('Schedule generated and saved successfully', {
         competitionId,
-        matchesCount: matches.length,
+        matchesCount: createdMatches.length,
         teamsCount: competition.teams.length
       });
 
-      return matches;
+      return createdMatches;
     } catch (error) {
       if (error instanceof BusinessError) {
         throw error;

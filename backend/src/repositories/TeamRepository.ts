@@ -98,7 +98,16 @@ export class TeamRepository {
 
     // 添加排序
     if (options?.pagination?.sortBy) {
-      const sortBy = options.pagination.sortBy;
+      // 字段映射：前端使用 strength，后端数据库使用 power_rating
+      const fieldMap: Record<string, string> = {
+        'strength': 'power_rating',
+        'powerRating': 'power_rating',
+        'name': 'name',
+        'foundedDate': 'founded_date',
+        'createdAt': 'created_at'
+      };
+
+      const sortBy = fieldMap[options.pagination.sortBy] || options.pagination.sortBy;
       const sortOrder = options.pagination.sortOrder || 'asc';
       query += ` ORDER BY t.${sortBy} ${sortOrder}`;
     } else {

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { teamController } from '../controllers/TeamController';
+import { regionController } from '../controllers/RegionController';
 import { competitionController } from '../controllers/CompetitionController';
 import { matchController } from '../controllers/MatchController';
 import { rankingController } from '../controllers/RankingController';
@@ -36,6 +37,20 @@ router.get('/teams/:id/matches', teamController.getTeamMatches.bind(teamControll
 router.get('/regions/:regionId/teams', teamController.getTeamsByRegion.bind(teamController));
 
 // =================================================================
+// 赛区管理路由
+// =================================================================
+
+// 赛区查询
+router.get('/regions', regionController.getRegions.bind(regionController));
+router.get('/regions/:id', regionController.getRegionById.bind(regionController));
+
+// 赛区更新
+router.put('/regions/:id', regionController.updateRegion.bind(regionController));
+
+// 赛区统计
+router.get('/regions/:id/statistics', regionController.getRegionStatistics.bind(regionController));
+
+// =================================================================
 // 赛事管理路由
 // =================================================================
 
@@ -62,6 +77,12 @@ router.delete('/competitions/:id/teams/:teamId', competitionController.removeTea
 
 // 赛程生成
 router.post('/competitions/:id/generate-schedule', competitionController.generateSchedule.bind(competitionController));
+
+// 获取当前轮次
+router.get('/competitions/:id/current-round', competitionController.getCurrentRound.bind(competitionController));
+
+// 模拟整轮比赛
+router.post('/competitions/:id/simulate-round', competitionController.simulateRound.bind(competitionController));
 
 // =================================================================
 // 比赛管理路由

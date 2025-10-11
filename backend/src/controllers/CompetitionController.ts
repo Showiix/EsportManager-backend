@@ -4,6 +4,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { competitionService } from '../services/CompetitionService';
+import { scheduleService } from '../services/ScheduleService';
 import { CreateCompetitionDto, QueryOptions, ApiResponse, CompetitionStatus, CompetitionType } from '../types';
 
 export class CompetitionController {
@@ -282,6 +283,48 @@ export class CompetitionController {
       const response: ApiResponse<any> = {
         success: true,
         data: matches,
+        meta: {
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // 获取当前轮次
+  async getCurrentRound(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const currentRound = await scheduleService.getCurrentRound(id);
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: { currentRound },
+        meta: {
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // 模拟整轮比赛
+  async simulateRound(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const result = await scheduleService.simulateRound(id);
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: result,
         meta: {
           timestamp: new Date().toISOString(),
           requestId: req.headers['x-request-id'] as string || 'unknown'

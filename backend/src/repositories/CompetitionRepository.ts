@@ -114,7 +114,17 @@ export class CompetitionRepository {
 
     // 添加排序
     if (options?.pagination?.sortBy) {
-      const sortBy = options.pagination.sortBy;
+      // 字段映射：前端字段名 -> 数据库字段名
+      const fieldMap: Record<string, string> = {
+        'startDate': 'start_date',
+        'endDate': 'end_date',
+        'name': 'name',
+        'type': 'type',
+        'status': 'status',
+        'createdAt': 'created_at'
+      };
+
+      const sortBy = fieldMap[options.pagination.sortBy] || options.pagination.sortBy;
       const sortOrder = options.pagination.sortOrder || 'asc';
       query += ` ORDER BY c.${sortBy} ${sortOrder}`;
     } else {
@@ -131,18 +141,31 @@ export class CompetitionRepository {
       params.push(limit, offset);
     }
 
-    const result = await databaseService.query(query, params);
+    try {
+      const result = await databaseService.query(query, params);
 
-    // 解析JSON字段
-    return result.rows.map(competition => {
-      if (competition.format) {
-        competition.format = JSON.parse(competition.format);
-      }
-      if (competition.scoring_rules) {
-        competition.scoringRules = JSON.parse(competition.scoring_rules);
-      }
-      return competition;
-    });
+      // 解析JSON字段
+      return result.rows.map(competition => {
+        if (competition.format && typeof competition.format === 'string') {
+          try {
+            competition.format = JSON.parse(competition.format);
+          } catch (e) {
+            competition.format = {};
+          }
+        }
+        if (competition.scoring_rules && typeof competition.scoring_rules === 'string') {
+          try {
+            competition.scoringRules = JSON.parse(competition.scoring_rules);
+          } catch (e) {
+            competition.scoringRules = {};
+          }
+        }
+        return competition;
+      });
+    } catch (error) {
+      logger.error('Failed to fetch competitions:', { error, query, params });
+      throw error;
+    }
   }
 
   // 根据赛季获取赛事
