@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { teamController } from '../controllers/TeamController';
 import { competitionController } from '../controllers/CompetitionController';
 import { matchController } from '../controllers/MatchController';
+import { rankingController } from '../controllers/RankingController';
+import { honorHallController } from '../controllers/HonorHallController';
 
 const router = Router();
 
@@ -88,6 +90,41 @@ router.put('/matches/:id/status', matchController.updateMatchStatus.bind(matchCo
 router.post('/matches/:id/simulate', matchController.simulateMatch.bind(matchController));
 
 // =================================================================
+// 积分排名路由
+// =================================================================
+
+// 获取赛区常规赛积分榜
+router.get('/rankings/regional', rankingController.getRegionalStandings.bind(rankingController));
+
+// 获取年度积分排名
+router.get('/rankings/annual', rankingController.getAnnualRankings.bind(rankingController));
+
+// 更新赛区常规赛积分榜
+router.post('/rankings/regional/update', rankingController.updateRegionalStandings.bind(rankingController));
+
+// 更新年度积分排名
+router.post('/rankings/annual/update', rankingController.updateAnnualRankings.bind(rankingController));
+
+// 批量刷新所有排名
+router.post('/rankings/refresh', rankingController.refreshAllRankings.bind(rankingController));
+
+// =================================================================
+// 荣誉殿堂路由
+// =================================================================
+
+// 获取可用赛季列表
+router.get('/honor-hall/seasons', honorHallController.getAvailableSeasons.bind(honorHallController));
+
+// 获取指定赛季的荣誉数据
+router.get('/honor-hall/seasons/:seasonId/honors', honorHallController.getSeasonHonors.bind(honorHallController));
+
+// 创建荣誉记录
+router.post('/honor-hall/records', honorHallController.createHonorRecord.bind(honorHallController));
+
+// 批量创建荣誉记录
+router.post('/honor-hall/records/batch', honorHallController.batchCreateHonorRecords.bind(honorHallController));
+
+// =================================================================
 // API信息路由
 // =================================================================
 
@@ -101,6 +138,8 @@ router.get('/', (req, res) => {
       teams: '/api/teams',
       competitions: '/api/competitions',
       matches: '/api/matches',
+      rankings: '/api/rankings',
+      honorHall: '/api/honor-hall',
       health: '/api/health'
     },
     documentation: 'Coming Soon'
