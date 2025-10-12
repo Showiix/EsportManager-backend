@@ -336,6 +336,27 @@ export class CompetitionController {
       next(error);
     }
   }
+
+  // 结束赛事（常规赛完成）
+  async finishCompetition(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const competition = await competitionService.finishCompetition(id);
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: competition,
+        meta: {
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const competitionController = new CompetitionController();

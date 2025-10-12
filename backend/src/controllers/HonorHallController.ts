@@ -25,18 +25,18 @@ export class HonorHallController {
 
   /**
    * 获取指定赛季的荣誉数据
-   * GET /api/honor-hall/seasons/:id/honors
+   * GET /api/honor-hall/seasons/:seasonId/honors
    */
   async getSeasonHonors(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const { seasonId } = req.params;
 
-      if (!id) {
+      if (!seasonId) {
         res.status(400).json(formatSimpleError('缺少必要参数：seasonId'));
         return;
       }
 
-      const honorData = await honorHallService.getSeasonHonorData(id);
+      const honorData = await honorHallService.getSeasonHonorData(seasonId);
 
       res.json(formatSimpleSuccess(honorData, '获取赛季荣誉数据成功'));
     } catch (error) {

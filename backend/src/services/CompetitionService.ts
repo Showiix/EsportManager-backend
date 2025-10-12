@@ -329,41 +329,210 @@ export class CompetitionService {
   // 生成赛程
   async generateSchedule(competitionId: string): Promise<Match[]> {
     try {
+      logger.info('Starting schedule generation', {
+        competitionId,
+        timestamp: new Date().toISOString()
+      });
+
       const competition = await this.getCompetitionById(competitionId, true);
 
+      logger.debug('Competition retrieved', {
+        competitionId,
+        competitionName: competition.name,
+        competitionStatus: competition.status,
+        competitionFormat: JSON.stringify(competition.format)
+      });
+
+      // 检查赛事状态
       if (competition.status !== CompetitionStatus.PLANNING) {
-        throw new BusinessError(
-          ErrorCodes.COMPETITION_NOT_ACTIVE,
-          'Can only generate schedule for competitions in planning status'
-        );
+        logger.warn('Competition status check for schedule generation', {
+          competitionId,
+          currentStatus: competition.status,
+          preferredStatus: CompetitionStatus.PLANNING
+        });
+
+        // 如果赛事已经是 ACTIVE 状态，说明已经生成过赛程
+        if (competition.status === CompetitionStatus.ACTIVE) {
+          logger.info('Competition is already active with generated schedule', {
+            competitionId,
+            status: competition.status
+          });
+          // 不抛出错误，允许继续执行（会生成新的赛程）
+        } else {
+          // 其他状态（如 COMPLETED）不允许生成赛程
+          throw new BusinessError(
+            ErrorCodes.COMPETITION_NOT_ACTIVE,
+            `Cannot generate schedule for competition in ${competition.status} status. Only PLANNING or ACTIVE status allowed.`
+          );
+        }
       }
 
       if (!competition.teams || competition.teams.length < 2) {
+        logger.error('Insufficient teams for schedule generation', {
+          competitionId,
+          teamsCount: competition.teams?.length || 0
+        });
         throw new BusinessError(
           ErrorCodes.INSUFFICIENT_TEAMS,
           'At least 2 teams required to generate schedule'
         );
       }
 
-      // 使用赛制引擎生成赛程
-      const matches = this.competitionEngine.generateScheduleByFormat(
-        competition.format,
-        competition.teams as Team[],
-        {
+      // 验证format配置
+      if (!competition.format) {
+        logger.error('Competition format is missing', { competitionId });
+        throw new BusinessError(
+          ErrorCodes.INVALID_COMPETITION_FORMAT,
+          'Competition format configuration is missing'
+        );
+      }
+
+      // 确保format是一个对象，如果是字符串则转换为对象
+      let formatConfig: any = competition.format;
+      if (typeof formatConfig === 'string') {
+        logger.warn('Competition format is a string, converting to object', {
           competitionId,
-          phase: 'regular_season',
-          format: competition.format.regularSeason?.matchFormat || 'BO3' as any,
-          startDate: competition.startDate
+          formatString: formatConfig
+        });
+        // 默认将字符串格式转换为league类型
+        formatConfig = {
+          type: 'league',
+          regularSeason: {
+            matchFormat: formatConfig as any || 'BO3'
+          }
+        };
+      }
+
+      // 确保format有type字段
+      if (!formatConfig.type) {
+        logger.warn('Competition format missing type field, defaulting to league', {
+          competitionId,
+          format: JSON.stringify(formatConfig)
+        });
+        formatConfig = {
+          type: 'league',
+          ...formatConfig,
+          regularSeason: {
+            matchFormat: formatConfig.regularSeason?.matchFormat || 'BO3'
+          }
+        };
+      }
+
+      logger.info('Format configuration validated', {
+        competitionId,
+        formatType: formatConfig.type,
+        formatConfig: JSON.stringify(formatConfig)
+      });
+
+      // 检查是否是春季赛或夏季赛（常规赛）
+      const isRegularSeasonCompetition = competition.type === 'spring' || competition.type === 'summer';
+      let matches: Match[] = [];
+
+      if (isRegularSeasonCompetition && formatConfig.type === 'league') {
+        // 按赛区分别生成赛程（常规赛）
+        logger.info('Generating regional schedules for regular season', {
+          competitionId,
+          totalTeams: competition.teams.length
+        });
+
+        // 按赛区分组队伍
+        const teamsByRegion = (competition.teams as any[]).reduce((acc, team) => {
+          const regionId = team.region_id || team.regionId;
+          if (!acc[regionId]) {
+            acc[regionId] = [];
+          }
+          acc[regionId].push({
+            id: team.team_id || team.id,
+            name: team.team_name || team.name,
+            regionId: regionId,
+            powerRating: team.power_rating || team.powerRating || 50
+          } as Team);
+          return acc;
+        }, {} as Record<string, Team[]>);
+
+        logger.info('Teams grouped by region', {
+          regions: Object.keys(teamsByRegion),
+          counts: Object.entries(teamsByRegion).map(([region, teams]) => ({
+            region,
+            count: teams.length
+          }))
+        });
+
+        let matchNumber = 0;
+
+        // 为每个赛区生成赛程
+        for (const [regionId, teams] of Object.entries(teamsByRegion)) {
+          logger.info('Generating schedule for region', {
+            regionId,
+            teamsCount: teams.length
+          });
+
+          const regionalMatches = this.competitionEngine.generateRegularSeasonSchedule(
+            teams,
+            {
+              competitionId,
+              phase: 'regular_season',
+              format: formatConfig.regularSeason?.matchFormat || 'BO3' as any,
+              startDate: competition.startDate
+            }
+          );
+
+          // 更新matchNumber为全局编号
+          regionalMatches.forEach(match => {
+            matchNumber++;
+            match.matchNumber = matchNumber;
+          });
+
+          matches.push(...regionalMatches);
+
+          logger.info('Regional schedule generated', {
+            regionId,
+            matchesCount: regionalMatches.length,
+            rounds: regionalMatches.length > 0 ? Math.max(...regionalMatches.map(m => m.roundNumber)) : 0
+          });
         }
-      );
+
+        logger.info('All regional schedules generated', {
+          competitionId,
+          totalMatches: matches.length,
+          regions: Object.keys(teamsByRegion).length
+        });
+      } else {
+        // 其他赛制（季后赛、MSI、世界赛等）直接使用原有逻辑
+        matches = this.competitionEngine.generateScheduleByFormat(
+          formatConfig,
+          competition.teams as Team[],
+          {
+            competitionId,
+            phase: 'regular_season',
+            format: formatConfig.regularSeason?.matchFormat || 'BO3' as any,
+            startDate: competition.startDate
+          }
+        );
+      }
+
+      logger.info('Matches generated by engine', {
+        competitionId,
+        matchesCount: matches.length
+      });
 
       // 批量保存比赛到数据库
+      logger.debug('Saving matches to database', {
+        competitionId,
+        matchesCount: matches.length
+      });
+
       const createdMatches = await this.matchRepository.createBatch(
         matches.map(match => ({
           ...match,
           id: undefined as any // 让数据库生成ID
         }))
       );
+
+      logger.info('Matches saved to database', {
+        competitionId,
+        createdMatchesCount: createdMatches.length
+      });
 
       // 更新赛事状态为活跃
       await this.updateCompetitionStatus(competitionId, CompetitionStatus.ACTIVE);
@@ -385,7 +554,11 @@ export class CompetitionService {
       if (error instanceof BusinessError) {
         throw error;
       }
-      logger.error('Failed to generate schedule:', { competitionId, error });
+      logger.error('Failed to generate schedule:', {
+        competitionId,
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw new Error('Failed to generate schedule');
     }
   }
@@ -409,6 +582,64 @@ export class CompetitionService {
     } catch (error) {
       logger.error('Failed to get competition teams:', { competitionId, error });
       throw new Error('Failed to retrieve competition teams');
+    }
+  }
+
+  // 结束赛事（常规赛完成）
+  async finishCompetition(competitionId: string): Promise<Competition> {
+    try {
+      logger.info('Finishing competition', { competitionId });
+
+      const competition = await this.getCompetitionById(competitionId);
+
+      // 检查赛事状态
+      if (competition.status === CompetitionStatus.COMPLETED) {
+        logger.warn('Competition already completed', { competitionId });
+        return competition;
+      }
+
+      if (competition.status !== CompetitionStatus.ACTIVE) {
+        throw new BusinessError(
+          ErrorCodes.COMPETITION_NOT_ACTIVE,
+          `Cannot finish competition in ${competition.status} status. Only active competitions can be finished.`
+        );
+      }
+
+      // 检查所有比赛是否完成 - 使用数据库查询
+      const { db } = await import('../config/database');
+      const result = await db.query(
+        `SELECT COUNT(*) as count
+         FROM matches
+         WHERE competition_id = $1 AND status != 'completed'`,
+        [competitionId]
+      );
+
+      const unfinishedCount = parseInt(result.rows[0].count);
+      if (unfinishedCount > 0) {
+        throw new BusinessError(
+          ErrorCodes.REGULAR_SEASON_NOT_COMPLETE,
+          `还有 ${unfinishedCount} 场比赛未完成`
+        );
+      }
+
+      // 更新赛事状态为已完成
+      const updatedCompetition = await this.updateCompetitionStatus(competitionId, CompetitionStatus.COMPLETED);
+
+      logger.info('Competition finished successfully', {
+        competitionId,
+        name: updatedCompetition.name
+      });
+
+      return updatedCompetition;
+    } catch (error) {
+      if (error instanceof BusinessError) {
+        throw error;
+      }
+      logger.error('Failed to finish competition:', {
+        competitionId,
+        error: error instanceof Error ? error.message : error
+      });
+      throw new Error('Failed to finish competition');
     }
   }
 

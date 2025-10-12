@@ -5,6 +5,8 @@ import { competitionController } from '../controllers/CompetitionController';
 import { matchController } from '../controllers/MatchController';
 import { rankingController } from '../controllers/RankingController';
 import { honorHallController } from '../controllers/HonorHallController';
+import { playoffController } from '../controllers/PlayoffController';
+import { msiController } from '../controllers/MSIController';
 
 const router = Router();
 
@@ -84,12 +86,22 @@ router.get('/competitions/:id/current-round', competitionController.getCurrentRo
 // 模拟整轮比赛
 router.post('/competitions/:id/simulate-round', competitionController.simulateRound.bind(competitionController));
 
+// 结束赛事（常规赛完成）
+router.post('/competitions/:id/finish', competitionController.finishCompetition.bind(competitionController));
+
 // =================================================================
 // 比赛管理路由
 // =================================================================
 
 // 比赛查询
 router.get('/matches', matchController.getMatches.bind(matchController));
+
+// 比赛状态查询 (必须在 :id 路由之前，避免路由冲突)
+router.get('/matches/upcoming', matchController.getUpcomingMatches.bind(matchController));
+router.get('/matches/recent', matchController.getRecentCompletedMatches.bind(matchController));
+router.get('/matches/live', matchController.getInProgressMatches.bind(matchController));
+
+// 比赛详情查询 (放在最后，避免与状态查询路由冲突)
 router.get('/matches/:id', matchController.getMatchById.bind(matchController));
 
 // 根据赛事获取比赛
@@ -97,11 +109,6 @@ router.get('/competitions/:competitionId/matches', matchController.getMatchesByC
 
 // 根据队伍获取比赛
 router.get('/teams/:teamId/matches', matchController.getMatchesByTeam.bind(matchController));
-
-// 比赛状态查询
-router.get('/matches/upcoming', matchController.getUpcomingMatches.bind(matchController));
-router.get('/matches/recent', matchController.getRecentCompletedMatches.bind(matchController));
-router.get('/matches/live', matchController.getInProgressMatches.bind(matchController));
 
 // 比赛结果管理
 router.put('/matches/:id/result', matchController.updateMatchResult.bind(matchController));
@@ -146,6 +153,50 @@ router.post('/honor-hall/records', honorHallController.createHonorRecord.bind(ho
 router.post('/honor-hall/records/batch', honorHallController.batchCreateHonorRecords.bind(honorHallController));
 
 // =================================================================
+// 季后赛路由
+// =================================================================
+
+// 生成季后赛对阵(常规赛结束后调用)
+router.post('/playoffs/generate', playoffController.generatePlayoff.bind(playoffController));
+
+// 获取季后赛对阵信息
+router.get('/playoffs/bracket', playoffController.getPlayoffBracket.bind(playoffController));
+
+// 获取赛区所有季后赛
+router.get('/playoffs/region/:regionId', playoffController.getRegionPlayoffs.bind(playoffController));
+
+// 模拟季后赛单场比赛(BO5)
+router.post('/playoffs/simulate-match', playoffController.simulatePlayoffMatch.bind(playoffController));
+
+// 获取季后赛资格队伍(常规赛前4名)
+router.get('/playoffs/qualified-teams', playoffController.getQualifiedTeams.bind(playoffController));
+
+// 检查是否可以生成季后赛(常规赛是否结束)
+router.get('/playoffs/check-eligibility', playoffController.checkPlayoffEligibility.bind(playoffController));
+
+// =================================================================
+// MSI季中赛路由
+// =================================================================
+
+// 生成MSI对阵(春季赛季后赛全部结束后调用)
+router.post('/msi/generate', msiController.generateMSI.bind(msiController));
+
+// 获取MSI对阵信息
+router.get('/msi/bracket', msiController.getMSIBracket.bind(msiController));
+
+// 模拟MSI单场比赛(BO5)
+router.post('/msi/simulate-match', msiController.simulateMSIMatch.bind(msiController));
+
+// 获取MSI资格队伍(各赛区春季赛前三名)
+router.get('/msi/qualified-teams', msiController.getQualifiedTeams.bind(msiController));
+
+// 检查是否可以生成MSI(所有赛区春季赛季后赛是否结束)
+router.get('/msi/check-eligibility', msiController.checkMSIEligibility.bind(msiController));
+
+// 获取历史MSI数据
+router.get('/msi/historical', msiController.getHistoricalMSI.bind(msiController));
+
+// =================================================================
 // API信息路由
 // =================================================================
 
@@ -161,6 +212,8 @@ router.get('/', (req, res) => {
       matches: '/api/matches',
       rankings: '/api/rankings',
       honorHall: '/api/honor-hall',
+      playoffs: '/api/playoffs',
+      msi: '/api/msi',
       health: '/api/health'
     },
     documentation: 'Coming Soon'

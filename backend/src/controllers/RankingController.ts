@@ -93,9 +93,13 @@ export class RankingController {
         return;
       }
 
+      // 更新积分榜
       await rankingService.updateRegionalStandings(regionId, seasonId, competitionType);
 
-      res.json(formatSimpleSuccess(null, '赛区积分榜更新成功'));
+      // 获取更新后的积分榜数据并返回给前端
+      const standings = await rankingService.getRegionalStandings(regionId, seasonId, competitionType);
+
+      res.json(formatSimpleSuccess(standings, '赛区积分榜更新成功'));
     } catch (error) {
       logger.error('Error in updateRegionalStandings:', error);
       next(error);

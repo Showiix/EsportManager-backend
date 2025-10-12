@@ -52,12 +52,28 @@ export class CompetitionRepository {
 
     const competition = result.rows[0];
 
-    // 解析JSON字段
-    if (competition.format) {
-      competition.format = JSON.parse(competition.format);
+    // 解析JSON字段（只有当字段是字符串时才解析）
+    if (competition.format && typeof competition.format === 'string') {
+      try {
+        competition.format = JSON.parse(competition.format);
+      } catch (e) {
+        logger.warn('Failed to parse competition format', {
+          competitionId: id,
+          format: competition.format
+        });
+        competition.format = {};
+      }
     }
-    if (competition.scoring_rules) {
-      competition.scoringRules = JSON.parse(competition.scoring_rules);
+    if (competition.scoring_rules && typeof competition.scoring_rules === 'string') {
+      try {
+        competition.scoringRules = JSON.parse(competition.scoring_rules);
+      } catch (e) {
+        logger.warn('Failed to parse competition scoring_rules', {
+          competitionId: id,
+          scoring_rules: competition.scoring_rules
+        });
+        competition.scoringRules = {};
+      }
     }
 
     // 如果包含关联数据
@@ -231,12 +247,28 @@ export class CompetitionRepository {
 
     const competition = result.rows[0];
 
-    // 解析JSON字段
-    if (competition.format) {
-      competition.format = JSON.parse(competition.format);
+    // 解析JSON字段（只有当字段是字符串时才解析）
+    if (competition.format && typeof competition.format === 'string') {
+      try {
+        competition.format = JSON.parse(competition.format);
+      } catch (e) {
+        logger.warn('Failed to parse competition format in updateStatus', {
+          competitionId: id,
+          format: competition.format
+        });
+        competition.format = {};
+      }
     }
-    if (competition.scoring_rules) {
-      competition.scoringRules = JSON.parse(competition.scoring_rules);
+    if (competition.scoring_rules && typeof competition.scoring_rules === 'string') {
+      try {
+        competition.scoringRules = JSON.parse(competition.scoring_rules);
+      } catch (e) {
+        logger.warn('Failed to parse competition scoring_rules in updateStatus', {
+          competitionId: id,
+          scoring_rules: competition.scoring_rules
+        });
+        competition.scoringRules = {};
+      }
     }
 
     logger.info('Competition status updated:', { competitionId: id, status });
@@ -299,9 +331,12 @@ export class CompetitionRepository {
     const query = `
       SELECT
         ct.*,
+        t.id as team_id,
         t.name as team_name,
         t.short_name,
         t.power_rating,
+        t.region_id,
+        r.id as region_id,
         r.name as region_name,
         r.code as region_code
       FROM competition_teams ct

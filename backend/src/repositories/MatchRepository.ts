@@ -6,6 +6,31 @@ import { databaseService } from '../services/DatabaseService';
 import { Match, UpdateMatchResultDto, QueryOptions, MatchStatus } from '../types';
 import { logger } from '../utils/logger';
 
+const snakeToCamel = (value: string): string =>
+  value.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
+const camelToSnake = (value: string): string =>
+  value.replace(/([A-Z])/g, (_, letter: string) => `_${letter.toLowerCase()}`);
+
+const toCamelCase = <T = any>(input: any): T => {
+  if (Array.isArray(input)) {
+    return input.map(item => toCamelCase(item)) as T;
+  }
+
+  if (input !== null && typeof input === 'object') {
+    const result: Record<string, unknown> = {};
+
+    Object.keys(input).forEach(key => {
+      const camelKey = snakeToCamel(key);
+      result[camelKey] = toCamelCase(input[key]);
+    });
+
+    return result as T;
+  }
+
+  return input as T;
+};
+
 export class MatchRepository {
   // 创建比赛
   async create(matchData: Omit<Match, 'id' | 'createdAt' | 'updatedAt'>): Promise<Match> {
@@ -37,8 +62,9 @@ export class MatchRepository {
       matchData.notes
     ]);
 
-    logger.info('Match created:', { matchId: result.rows[0].id });
-    return result.rows[0];
+    const createdMatch = toCamelCase<Record<string, any>>(result.rows[0]);
+    logger.info('Match created:', { matchId: createdMatch.id });
+    return createdMatch as Match;
   }
 
   // 根据ID获取比赛
@@ -68,27 +94,28 @@ export class MatchRepository {
       return null;
     }
 
-    const match = result.rows[0];
+    const rawMatch = toCamelCase<Record<string, any>>(result.rows[0]);
+    const match = rawMatch as Match & Record<string, any>;
 
     // 如果包含关联数据
     if (options?.include?.includes('teams')) {
       match.teamA = {
         id: match.teamAId,
-        name: match.team_a_name,
-        shortName: match.team_a_short
+        name: rawMatch.teamAName,
+        shortName: rawMatch.teamAShort
       } as any;
 
       match.teamB = {
         id: match.teamBId,
-        name: match.team_b_name,
-        shortName: match.team_b_short
+        name: rawMatch.teamBName,
+        shortName: rawMatch.teamBShort
       } as any;
 
-      if (match.winnerId && match.winner_name) {
+      if (match.winnerId && rawMatch.winnerName) {
         match.winner = {
           id: match.winnerId,
-          name: match.winner_name,
-          shortName: match.winner_short
+          name: rawMatch.winnerName,
+          shortName: rawMatch.winnerShort
         } as any;
       }
     }
@@ -96,8 +123,8 @@ export class MatchRepository {
     if (options?.include?.includes('competition')) {
       match.competition = {
         id: match.competitionId,
-        name: match.competition_name,
-        type: match.competition_type
+        name: rawMatch.competitionName,
+        type: rawMatch.competitionType
       } as any;
     }
 
@@ -170,7 +197,7 @@ export class MatchRepository {
 
     // 添加排序
     if (options?.pagination?.sortBy) {
-      const sortBy = options.pagination.sortBy;
+      const sortBy = camelToSnake(options.pagination.sortBy);
       const sortOrder = options.pagination.sortOrder || 'asc';
       query += ` ORDER BY m.${sortBy} ${sortOrder}`;
     } else {
@@ -188,7 +215,7 @@ export class MatchRepository {
     }
 
     const result = await databaseService.query(query, params);
-    return result.rows;
+    return toCamelCase(result.rows) as Match[];
   }
 
   // 根据赛事获取比赛
@@ -219,7 +246,7 @@ export class MatchRepository {
     query += ` ORDER BY m.round_number ASC, m.match_number ASC`;
 
     const result = await databaseService.query(query, params);
-    return result.rows;
+    return toCamelCase(result.rows) as Match[];
   }
 
   // 根据队伍获取比赛
@@ -252,7 +279,7 @@ export class MatchRepository {
     }
 
     const result = await databaseService.query(query, params);
-    return result.rows;
+    return toCamelCase(result.rows) as Match[];
   }
 
   // 更新比赛结果
@@ -311,6 +338,7 @@ export class MatchRepository {
       return null;
     }
 
+    const updatedMatch = toCamelCase<Record<string, any>>(result.rows[0]);
     logger.info('Match result updated:', {
       matchId: id,
       scoreA: resultData.scoreA,
@@ -318,7 +346,7 @@ export class MatchRepository {
       winnerId: resultData.winnerId
     });
 
-    return result.rows[0];
+    return updatedMatch as Match;
   }
 
   // 更新比赛状态
@@ -336,8 +364,10 @@ export class MatchRepository {
       return null;
     }
 
+    const updatedMatch = toCamelCase<Record<string, any>>(result.rows[0]);
+
     logger.info('Match status updated:', { matchId: id, status });
-    return result.rows[0];
+    return updatedMatch as Match;
   }
 
   // 获取即将进行的比赛
@@ -367,7 +397,7 @@ export class MatchRepository {
     }
 
     const result = await databaseService.query(query, params);
-    return result.rows;
+    return toCamelCase(result.rows) as Match[];
   }
 
   // 获取最近完成的比赛
@@ -400,7 +430,7 @@ export class MatchRepository {
     }
 
     const result = await databaseService.query(query, params);
-    return result.rows;
+    return toCamelCase(result.rows) as Match[];
   }
 
   // 获取进行中的比赛
@@ -423,7 +453,7 @@ export class MatchRepository {
     `;
 
     const result = await databaseService.query(query);
-    return result.rows;
+    return toCamelCase(result.rows) as Match[];
   }
 
   // 批量创建比赛
@@ -470,9 +500,10 @@ export class MatchRepository {
     ]);
 
     const result = await databaseService.query(query, params);
+    const createdMatches = toCamelCase(result.rows) as Match[];
 
-    logger.info('Batch matches created:', { count: result.rows.length });
-    return result.rows;
+    logger.info('Batch matches created:', { count: createdMatches.length });
+    return createdMatches;
   }
 
   // 获取比赛数量

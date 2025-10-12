@@ -398,6 +398,122 @@ export interface PaginationParams {
 }
 
 // =================================================================
+// 季后赛相关类型定义
+// =================================================================
+
+// 季后赛晋级资格
+export interface PlayoffQualification {
+  teamId: string;
+  teamName: string;
+  regionId: string;
+  seed: number; // 种子位 1-4
+  regularSeasonRank: number;
+  regularSeasonPoints: number;
+  wins: number;
+  losses: number;
+}
+
+// 季后赛比赛类型
+export type PlayoffMatchType = 'winners_bracket' | 'losers_bracket' | 'grand_final';
+
+// 季后赛比赛状态
+export type PlayoffMatchStatus = 'pending' | 'in_progress' | 'completed';
+
+// 季后赛对阵表状态
+export type PlayoffBracketStatus = 'not_started' | 'in_progress' | 'completed';
+
+// 季后赛比赛(扩展Match)
+export interface PlayoffMatch {
+  id: string;
+  competitionId: string;
+  playoffBracketId: string;
+  roundNumber: number;
+  matchType: PlayoffMatchType;
+  bestOf: number; // BO5 = 5
+  teamAId?: string;
+  teamBId?: string;
+  teamAName?: string;
+  teamBName?: string;
+  teamASeed?: number;
+  teamBSeed?: number;
+  scoreA: number;
+  scoreB: number;
+  winnerId?: string;
+  status: PlayoffMatchStatus;
+  nextMatchId?: string; // 胜者去向
+  loserNextMatchId?: string; // 败者去向
+  scheduledAt?: Date;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 季后赛轮次
+export interface PlayoffRound {
+  roundNumber: number;
+  roundName: string;
+  bracketType: 'winners' | 'losers' | 'grand_final';
+  matches: PlayoffMatch[];
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
+// 季后赛对阵表
+export interface PlayoffBracket {
+  id: string;
+  competitionId: string;
+  regionId: string;
+  regionName: string;
+  competitionType: 'spring' | 'summer';
+  status: PlayoffBracketStatus;
+  qualifiedTeams: PlayoffQualification[];
+  rounds: PlayoffRound[];
+
+  // 最终排名
+  champion?: PlayoffQualification;
+  runnerUp?: PlayoffQualification;
+  thirdPlace?: PlayoffQualification;
+  fourthPlace?: PlayoffQualification;
+
+  // 积分分配
+  pointsDistribution: {
+    champion: number; // 12
+    runnerUp: number; // 10
+    thirdPlace: number; // 8
+    fourthPlace: number; // 6
+  };
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 生成季后赛请求
+export interface GeneratePlayoffRequest {
+  competitionId: string;
+  regionId: string;
+  seasonId: string;
+  competitionType: 'spring' | 'summer';
+}
+
+// 模拟季后赛比赛请求
+export interface SimulatePlayoffMatchRequest {
+  matchId: string;
+  competitionId: string;
+}
+
+// 模拟季后赛比赛响应
+export interface SimulatePlayoffMatchResponse {
+  match: PlayoffMatch;
+  bracket: PlayoffBracket;
+  isPlayoffComplete: boolean;
+  finalStandings?: {
+    champion: PlayoffQualification;
+    runnerUp: PlayoffQualification;
+    thirdPlace: PlayoffQualification;
+    fourthPlace: PlayoffQualification;
+  };
+}
+
+// =================================================================
 // 错误类型定义
 // =================================================================
 
@@ -410,7 +526,15 @@ export enum ErrorCodes {
   INVALID_SCORING_RULES = 'INVALID_SCORING_RULES',
   SEASON_NOT_ACTIVE = 'SEASON_NOT_ACTIVE',
   MATCH_ALREADY_COMPLETED = 'MATCH_ALREADY_COMPLETED',
-  INVALID_COMPETITION_FORMAT = 'INVALID_COMPETITION_FORMAT'
+  INVALID_COMPETITION_FORMAT = 'INVALID_COMPETITION_FORMAT',
+  PLAYOFF_ALREADY_EXISTS = 'PLAYOFF_ALREADY_EXISTS',
+  REGULAR_SEASON_NOT_COMPLETE = 'REGULAR_SEASON_NOT_COMPLETE',
+  PLAYOFF_NOT_FOUND = 'PLAYOFF_NOT_FOUND',
+  PLAYOFF_MATCH_NOT_READY = 'PLAYOFF_MATCH_NOT_READY',
+  MSI_ALREADY_EXISTS = 'MSI_ALREADY_EXISTS',
+  MSI_NOT_FOUND = 'MSI_NOT_FOUND',
+  MSI_MATCH_NOT_READY = 'MSI_MATCH_NOT_READY',
+  ALL_SPRING_PLAYOFFS_NOT_COMPLETE = 'ALL_SPRING_PLAYOFFS_NOT_COMPLETE'
 }
 
 // 自定义错误类
@@ -441,4 +565,157 @@ export interface CacheOptions {
   ttl?: number;
   key?: string;
   invalidatePattern?: string;
+}
+
+// =================================================================
+// MSI季中赛相关类型定义
+// =================================================================
+
+// MSI参赛队伍资格
+export interface MSIQualification {
+  teamId: string;
+  teamName: string;
+  regionId: string;
+  regionName: string;
+  seed: number; // 1: 冠军(传奇组), 2: 亚军(挑战者组), 3: 季军(资格赛组)
+  springPlayoffRank: number; // 春季赛季后赛排名
+  springPlayoffPoints: number; // 春季赛季后赛积分
+  group: 'legendary' | 'challenger' | 'qualifier'; // 所属分组
+}
+
+// MSI比赛类型
+export type MSIMatchType =
+  | 'qualifier_knockout' // 资格赛组单淘汰
+  | 'challenger_match' // 挑战者组对决
+  | 'losers_round_1' // 败者组第一轮
+  | 'losers_round_2' // 败者组第二轮
+  | 'winners_round_1' // 胜者组第一轮(传奇组对决)
+  | 'losers_round_3' // 败者组第三轮
+  | 'losers_round_4' // 败者组第四轮(攀登者赛)
+  | 'winners_round_2' // 胜者组第二轮
+  | 'losers_final' // 败者组决赛
+  | 'grand_final'; // 总决赛
+
+// MSI比赛状态
+export type MSIMatchStatus = 'pending' | 'in_progress' | 'completed';
+
+// MSI对阵表状态
+export type MSIBracketStatus = 'not_started' | 'in_progress' | 'completed';
+
+// MSI比赛
+export interface MSIMatch {
+  id: string;
+  msiBracketId: string;
+  roundNumber: number;
+  matchType: MSIMatchType;
+  bestOf: number; // BO5 = 5
+  bracketType: 'winners' | 'losers' | 'qualifier' | 'challenger' | 'grand_final';
+  teamAId?: string;
+  teamBId?: string;
+  teamAName?: string;
+  teamBName?: string;
+  teamASeed?: number;
+  teamBSeed?: number;
+  scoreA: number;
+  scoreB: number;
+  winnerId?: string;
+  status: MSIMatchStatus;
+  nextMatchId?: string; // 胜者去向
+  loserNextMatchId?: string; // 败者去向
+  matchNumber?: number; // 比赛编号
+  scheduledAt?: Date;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// MSI轮次
+export interface MSIRound {
+  roundNumber: number;
+  roundName: string;
+  stage: 'qualifier' | 'main'; // 预选赛阶段或正式阶段
+  bracketType: 'winners' | 'losers' | 'qualifier' | 'challenger' | 'grand_final';
+  matches: MSIMatch[];
+  startDate?: string;
+  endDate?: string;
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
+// MSI对阵表
+export interface MSIBracket {
+  id: string;
+  seasonId: string;
+  seasonYear: number;
+  status: MSIBracketStatus;
+
+  // 参赛队伍分组
+  qualifiedTeams: MSIQualification[];
+  legendaryGroup: MSIQualification[]; // 4队: 各赛区春季赛冠军
+  challengerGroup: MSIQualification[]; // 4队: 各赛区春季赛亚军
+  qualifierGroup: MSIQualification[]; // 4队: 各赛区春季赛季军
+
+  // 对阵信息
+  rounds: MSIRound[];
+
+  // 最终排名
+  champion?: MSIQualification;
+  runnerUp?: MSIQualification;
+  thirdPlace?: MSIQualification;
+  fourthPlace?: MSIQualification;
+
+  // 其他排名(用于积分分配)
+  loserRound2?: MSIQualification[]; // 败者组第二轮淘汰(2队)
+  loserRound1?: MSIQualification[]; // 败者组第一轮淘汰(2队)
+
+  // 积分分配规则
+  pointsDistribution: {
+    champion: number; // 20分
+    runnerUp: number; // 16分
+    thirdPlace: number; // 12分
+    fourthPlace: number; // 8分
+    loserRound2: number; // 6分
+    loserRound1: number; // 4分
+  };
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// MSI生成请求
+export interface GenerateMSIRequest {
+  seasonId: string;
+}
+
+// MSI模拟请求
+export interface SimulateMSIMatchRequest {
+  matchId: string;
+  msiId: string;
+}
+
+// MSI模拟响应
+export interface SimulateMSIMatchResponse {
+  match: MSIMatch;
+  winner: MSIQualification;
+  loser: MSIQualification;
+  nextMatch?: MSIMatch;
+  loserNextMatch?: MSIMatch;
+  isMSIComplete: boolean;
+  finalStandings?: {
+    champion?: MSIQualification;
+    runnerUp?: MSIQualification;
+    thirdPlace?: MSIQualification;
+    fourthPlace?: MSIQualification;
+    loserRound2?: MSIQualification[];
+    loserRound1?: MSIQualification[];
+  };
+}
+
+// MSI资格检查响应
+export interface MSIEligibilityResponse {
+  eligible: boolean;
+  reason?: string;
+  qualifiedTeams?: MSIQualification[];
+  legendaryGroup?: MSIQualification[];
+  challengerGroup?: MSIQualification[];
+  qualifierGroup?: MSIQualification[];
 }
