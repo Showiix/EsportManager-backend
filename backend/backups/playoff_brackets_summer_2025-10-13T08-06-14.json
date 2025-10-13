@@ -1,0 +1,254 @@
+[
+  {
+    "id": "6b319606-b1f8-44d7-987a-5c4e8c0109cc",
+    "competition_id": 8,
+    "region_id": 1,
+    "region_name": "中国大陆职业联赛",
+    "competition_type": "summer",
+    "status": "not_started",
+    "qualified_teams": [
+      {
+        "seed": 1,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "2",
+        "regionId": "1",
+        "teamName": "Bilibili Gaming",
+        "regularSeasonRank": 1,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 2,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "3",
+        "regionId": "1",
+        "teamName": "Top Esports",
+        "regularSeasonRank": 2,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 3,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "4",
+        "regionId": "1",
+        "teamName": "Weibo Gaming",
+        "regularSeasonRank": 3,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 4,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "1",
+        "regionId": "1",
+        "teamName": "JD Gaming",
+        "regularSeasonRank": 4,
+        "regularSeasonPoints": "27"
+      }
+    ],
+    "champion_id": null,
+    "runner_up_id": null,
+    "third_place_id": null,
+    "fourth_place_id": null,
+    "points_distribution": {
+      "champion": 12,
+      "runnerUp": 10,
+      "thirdPlace": 8,
+      "fourthPlace": 6
+    },
+    "created_at": "2025-10-13T07:26:12.946Z",
+    "updated_at": "2025-10-13T07:26:12.946Z",
+    "new_season_id": null
+  },
+  {
+    "id": "f22e4dd3-e341-4fed-a0d6-595215a76ac7",
+    "competition_id": 8,
+    "region_id": 2,
+    "region_name": "韩国冠军联赛",
+    "competition_type": "summer",
+    "status": "not_started",
+    "qualified_teams": [
+      {
+        "seed": 1,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "12",
+        "regionId": "2",
+        "teamName": "Gen.G",
+        "regularSeasonRank": 1,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 2,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "13",
+        "regionId": "2",
+        "teamName": "DRX",
+        "regularSeasonRank": 2,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 3,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "14",
+        "regionId": "2",
+        "teamName": "KT Rolster",
+        "regularSeasonRank": 3,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 4,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "11",
+        "regionId": "2",
+        "teamName": "T1",
+        "regularSeasonRank": 4,
+        "regularSeasonPoints": "27"
+      }
+    ],
+    "champion_id": null,
+    "runner_up_id": null,
+    "third_place_id": null,
+    "fourth_place_id": null,
+    "points_distribution": {
+      "champion": 12,
+      "runnerUp": 10,
+      "thirdPlace": 8,
+      "fourthPlace": 6
+    },
+    "created_at": "2025-10-13T07:46:40.459Z",
+    "updated_at": "2025-10-13T07:46:40.459Z",
+    "new_season_id": null
+  },
+  {
+    "id": "b3247cba-85d1-4062-ac96-43bec326955b",
+    "competition_id": 8,
+    "region_id": 3,
+    "region_name": "欧洲冠军联赛",
+    "competition_type": "summer",
+    "status": "not_started",
+    "qualified_teams": [
+      {
+        "seed": 1,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "22",
+        "regionId": "3",
+        "teamName": "Fnatic",
+        "regularSeasonRank": 1,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 2,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "23",
+        "regionId": "3",
+        "teamName": "MAD Lions",
+        "regularSeasonRank": 2,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 3,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "24",
+        "regionId": "3",
+        "teamName": "Team Vitality",
+        "regularSeasonRank": 3,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 4,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "21",
+        "regionId": "3",
+        "teamName": "G2 Esports",
+        "regularSeasonRank": 4,
+        "regularSeasonPoints": "27"
+      }
+    ],
+    "champion_id": null,
+    "runner_up_id": null,
+    "third_place_id": null,
+    "fourth_place_id": null,
+    "points_distribution": {
+      "champion": 12,
+      "runnerUp": 10,
+      "thirdPlace": 8,
+      "fourthPlace": 6
+    },
+    "created_at": "2025-10-13T07:46:43.189Z",
+    "updated_at": "2025-10-13T07:46:43.189Z",
+    "new_season_id": null
+  },
+  {
+    "id": "fc084276-c8f5-4f62-86bc-d0dc14ec4ec6",
+    "competition_id": 8,
+    "region_id": 4,
+    "region_name": "北美冠军联赛",
+    "competition_type": "summer",
+    "status": "not_started",
+    "qualified_teams": [
+      {
+        "seed": 1,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "32",
+        "regionId": "4",
+        "teamName": "Team Liquid",
+        "regularSeasonRank": 1,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 2,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "33",
+        "regionId": "4",
+        "teamName": "100 Thieves",
+        "regularSeasonRank": 2,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 3,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "34",
+        "regionId": "4",
+        "teamName": "TSM",
+        "regularSeasonRank": 3,
+        "regularSeasonPoints": "27"
+      },
+      {
+        "seed": 4,
+        "wins": "9",
+        "losses": "9",
+        "teamId": "31",
+        "regionId": "4",
+        "teamName": "Cloud9",
+        "regularSeasonRank": 4,
+        "regularSeasonPoints": "27"
+      }
+    ],
+    "champion_id": null,
+    "runner_up_id": null,
+    "third_place_id": null,
+    "fourth_place_id": null,
+    "points_distribution": {
+      "champion": 12,
+      "runnerUp": 10,
+      "thirdPlace": 8,
+      "fourthPlace": 6
+    },
+    "created_at": "2025-10-13T07:46:45.304Z",
+    "updated_at": "2025-10-13T07:46:45.304Z",
+    "new_season_id": null
+  }
+]

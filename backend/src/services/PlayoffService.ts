@@ -20,9 +20,17 @@ import {
 
 export class PlayoffService {
   /**
-   * 将赛区代码转换为数据库中的region_id
+   * 将赛区代码或ID转换为数据库中的region_id
+   * 支持传入赛区代码（'LPL', 'LCK'等）或数字字符串（'1', '2'等）
    */
   private convertRegionCodeToId(regionCode: string): number {
+    // 首先尝试直接转换为数字（如果是数字字符串）
+    const numericId = parseInt(regionCode, 10);
+    if (!isNaN(numericId) && numericId >= 1 && numericId <= 4) {
+      return numericId;
+    }
+
+    // 如果不是数字，尝试从赛区代码映射
     const mapping: Record<string, number> = {
       'LPL': 1,
       'LCK': 2,
@@ -30,7 +38,15 @@ export class PlayoffService {
       'LCS': 4
     };
     const upperCode = regionCode.toUpperCase();
-    return mapping[upperCode] || 1; // 默认返回LPL的ID
+    const mappedId = mapping[upperCode];
+
+    if (mappedId) {
+      return mappedId;
+    }
+
+    // 如果都不匹配，记录警告并返回默认值
+    logger.warn('无效的赛区代码或ID，使用默认值LPL', { regionCode });
+    return 1;
   }
 
   /**

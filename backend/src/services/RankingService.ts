@@ -348,11 +348,8 @@ export class RankingService {
         losses++;
       }
 
-      // 计算积分
-      const points = this.calculateRegularPoints(
-        isTeamA ? match.score_a : match.score_b,
-        isTeamA ? match.score_b : match.score_a
-      );
+      // 计算积分 - 始终传入(score_a, score_b)，然后根据队伍身份取对应的积分
+      const points = this.calculateRegularPoints(match.score_a, match.score_b);
       regularSeasonPoints += isTeamA ? points.homePoints : points.awayPoints;
 
       // 计算小场分差
