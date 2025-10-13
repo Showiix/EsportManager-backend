@@ -20,10 +20,27 @@ import {
 
 export class PlayoffService {
   /**
+   * 将赛区代码转换为数据库中的region_id
+   */
+  private convertRegionCodeToId(regionCode: string): number {
+    const mapping: Record<string, number> = {
+      'LPL': 1,
+      'LCK': 2,
+      'LEC': 3,
+      'LCS': 4
+    };
+    const upperCode = regionCode.toUpperCase();
+    return mapping[upperCode] || 1; // 默认返回LPL的ID
+  }
+
+  /**
    * 获取赛区所有季后赛
    */
   async getRegionPlayoffs(regionId: string, seasonId: string): Promise<PlayoffBracket[]> {
     try {
+      // 将赛区代码转换为数据库ID
+      const regionIdNum = this.convertRegionCodeToId(regionId);
+
       // 1. 查询该赛区在指定赛季的所有季后赛对阵
       const bracketsQuery = `
         SELECT pb.*
@@ -32,7 +49,7 @@ export class PlayoffService {
         WHERE pb.region_id = $1 AND c.season_id = $2
         ORDER BY pb.created_at DESC
       `;
-      const bracketsResult = await db.query(bracketsQuery, [regionId, seasonId]);
+      const bracketsResult = await db.query(bracketsQuery, [regionIdNum, seasonId]);
 
       if (bracketsResult.rows.length === 0) {
         logger.info('该赛区在指定赛季没有季后赛数据', { regionId, seasonId });
@@ -111,16 +128,24 @@ export class PlayoffService {
     qualifiedTeams?: any[];
   }> {
     try {
+      // 将赛区代码转换为数据库ID
+      const regionIdNum = this.convertRegionCodeToId(regionId);
+
       // 1. 检查常规赛是否结束
       const competitionQuery = `
-        SELECT status FROM competitions WHERE id = $1
+        SELECT id, status, type FROM competitions WHERE id = $1
       `;
       const compResult = await db.query(competitionQuery, [competitionId]);
 
       if (compResult.rows.length === 0) {
+        logger.error('检查季后赛资格时未找到赛事', {
+          competitionId,
+          regionId,
+          message: '数据库中不存在该赛事ID'
+        });
         return {
           eligible: false,
-          reason: '赛事不存在'
+          reason: `赛事不存在 (ID: ${competitionId})`
         };
       }
 
@@ -137,7 +162,7 @@ export class PlayoffService {
         SELECT id FROM playoff_brackets
         WHERE competition_id = $1 AND region_id = $2
       `;
-      const existingResult = await db.query(existingPlayoffQuery, [competitionId, regionId]);
+      const existingResult = await db.query(existingPlayoffQuery, [competitionId, regionIdNum]);
 
       if (existingResult.rows.length > 0) {
         return {
@@ -175,6 +200,9 @@ export class PlayoffService {
    */
   async getQualifiedTeams(competitionId: string, regionId: string): Promise<PlayoffQualification[]> {
     try {
+      // 将赛区代码转换为数据库ID
+      const regionIdNum = this.convertRegionCodeToId(regionId);
+
       // 从matches表直接计算常规赛积分榜,获取前4名
       // 先尝试从regional_standings表获取,如果没有数据则从matches表计算
       const standingsQuery = `
@@ -194,7 +222,7 @@ export class PlayoffService {
         LIMIT 4
       `;
 
-      let result = await db.query(standingsQuery, [competitionId, regionId]);
+      let result = await db.query(standingsQuery, [competitionId, regionIdNum]);
 
       // 如果regional_standings没有数据,从matches表实时计算
       if (result.rows.length === 0) {
@@ -238,7 +266,7 @@ export class PlayoffService {
           LIMIT 4
         `;
 
-        result = await db.query(matchesQuery, [competitionId, regionId]);
+        result = await db.query(matchesQuery, [competitionId, regionIdNum]);
       }
 
       if (result.rows.length < 4) {
@@ -274,6 +302,9 @@ export class PlayoffService {
     try {
       await client.query('BEGIN');
 
+      // 将赛区代码转换为数据库ID
+      const regionIdNum = this.convertRegionCodeToId(request.regionId);
+
       // 1. 检查资格
       const eligibility = await this.checkPlayoffEligibility(request.competitionId, request.regionId);
       if (!eligibility.eligible) {
@@ -287,7 +318,7 @@ export class PlayoffService {
 
       // 2. 获取赛区名称
       const regionQuery = `SELECT name FROM regions WHERE id = $1`;
-      const regionResult = await client.query(regionQuery, [request.regionId]);
+      const regionResult = await client.query(regionQuery, [regionIdNum]);
       const regionName = regionResult.rows[0]?.name || '未知赛区';
 
       // 3. 创建季后赛对阵表
@@ -310,7 +341,7 @@ export class PlayoffService {
       await client.query(insertBracketQuery, [
         bracketId,
         request.competitionId,
-        request.regionId,
+        regionIdNum,  // 使用转换后的数字ID
         regionName,
         request.competitionType,
         'not_started',

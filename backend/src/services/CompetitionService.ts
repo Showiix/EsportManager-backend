@@ -625,6 +625,46 @@ export class CompetitionService {
       // 更新赛事状态为已完成
       const updatedCompetition = await this.updateCompetitionStatus(competitionId, CompetitionStatus.COMPLETED);
 
+      // 如果是常规赛（春季赛或夏季赛），更新积分榜
+      if (competition.type === 'spring' || competition.type === 'summer') {
+        logger.info('Updating regional standings after competition finish', {
+          competitionId,
+          seasonId: competition.seasonId,
+          type: competition.type
+        });
+
+        try {
+          // 导入 RankingService
+          const { rankingService } = await import('./RankingService');
+
+          // 获取所有赛区
+          const regionsQuery = 'SELECT id FROM regions WHERE is_active = true';
+          const regionsResult = await db.query(regionsQuery);
+
+          // 为每个赛区更新积分榜
+          for (const region of regionsResult.rows) {
+            await rankingService.updateRegionalStandings(
+              region.id.toString(),
+              competition.seasonId.toString(),
+              competition.type as 'spring' | 'summer'
+            );
+            logger.info('Regional standings updated', {
+              regionId: region.id,
+              seasonId: competition.seasonId,
+              type: competition.type
+            });
+          }
+
+          logger.info('All regional standings updated successfully', { competitionId });
+        } catch (error) {
+          logger.error('Failed to update regional standings:', {
+            competitionId,
+            error: error instanceof Error ? error.message : error
+          });
+          // 不抛出错误，允许赛事完成流程继续
+        }
+      }
+
       logger.info('Competition finished successfully', {
         competitionId,
         name: updatedCompetition.name
