@@ -218,8 +218,12 @@ export class MatchRepository {
     return toCamelCase(result.rows) as Match[];
   }
 
-  // 根据赛事获取比赛
+  // 根据赛事获取比赛（支持competition_id或competition_code）
   async findByCompetition(competitionId: string, phase?: string): Promise<Match[]> {
+    // 判断是competition_code还是id
+    const isNumeric = /^\d+$/.test(competitionId);
+    const queryField = isNumeric ? 'm.competition_id' : 'c.competition_code';
+
     let query = `
       SELECT
         m.*,
@@ -228,12 +232,15 @@ export class MatchRepository {
         tb.name as team_b_name,
         tb.short_name as team_b_short,
         tw.name as winner_name,
-        tw.short_name as winner_short
+        tw.short_name as winner_short,
+        c.name as competition_name,
+        c.type as competition_type
       FROM matches m
       JOIN teams ta ON m.team_a_id = ta.id
       JOIN teams tb ON m.team_b_id = tb.id
       LEFT JOIN teams tw ON m.winner_id = tw.id
-      WHERE m.competition_id = $1
+      JOIN competitions c ON m.competition_id = c.id
+      WHERE ${queryField} = $1
     `;
 
     const params = [competitionId];

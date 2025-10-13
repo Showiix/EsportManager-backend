@@ -4,6 +4,7 @@
 
 import { PoolClient } from 'pg';
 import { db } from '@/config/database';
+import { logger } from '@/utils/logger';
 import {
   MSIBracket,
   MSIMatch,
@@ -158,7 +159,7 @@ export class MSIService {
         qualifierGroup
       };
     } catch (error: any) {
-      console.error('检查MSI资格失败:', error);
+      logger.error('检查MSI资格失败', { error: error.message, seasonId });
       throw new BusinessError(
         ErrorCodes.INVALID_COMPETITION_FORMAT,
         '检查MSI资格失败',
@@ -269,7 +270,7 @@ export class MSIService {
       };
     } catch (error: any) {
       await client.query('ROLLBACK');
-      console.error('生成MSI失败:', error);
+      logger.error('生成MSI失败', { error: error.message, request });
 
       if (error instanceof BusinessError) {
         throw error;
@@ -701,7 +702,7 @@ export class MSIService {
         updatedAt: bracket.updated_at
       };
     } catch (error: any) {
-      console.error('获取MSI对阵失败:', error);
+      logger.error('获取MSI对阵失败', { error: error.message, seasonId });
       throw new BusinessError(
         ErrorCodes.MSI_NOT_FOUND,
         '获取MSI对阵失败',
@@ -799,7 +800,7 @@ export class MSIService {
       };
     } catch (error: any) {
       await client.query('ROLLBACK');
-      console.error('模拟MSI比赛失败:', error);
+      logger.error('模拟MSI比赛失败', { error: error.message, request });
 
       if (error instanceof BusinessError) {
         throw error;
@@ -827,15 +828,20 @@ export class MSIService {
     const teamsQuery = `SELECT id, power_rating, name FROM teams WHERE id IN ($1, $2)`;
     const teamsResult = await client.query(teamsQuery, [teamAId, teamBId]);
 
-    console.log(`[MSI DEBUG] 查询队伍实力 - teamAId: ${teamAId}, teamBId: ${teamBId}`);
-    console.log(`[MSI DEBUG] 查询结果:`, teamsResult.rows.map((r: any) => ({ id: r.id, type: typeof r.id, name: r.name })));
+    logger.debug('[MSI] 查询队伍实力', {
+      teamAId,
+      teamBId,
+      results: teamsResult.rows.map((r: any) => ({ id: r.id, type: typeof r.id, name: r.name }))
+    });
 
     // 统一使用字符串比较
     const teamA = teamsResult.rows.find((t: any) => t.id.toString() === teamAId.toString());
     const teamB = teamsResult.rows.find((t: any) => t.id.toString() === teamBId.toString());
 
-    console.log(`[MSI DEBUG] teamA:`, teamA ? `${teamA.name} (power: ${teamA.power_rating})` : 'undefined');
-    console.log(`[MSI DEBUG] teamB:`, teamB ? `${teamB.name} (power: ${teamB.power_rating})` : 'undefined');
+    logger.debug('[MSI] 匹配队伍结果', {
+      teamA: teamA ? { name: teamA.name, power: teamA.power_rating } : null,
+      teamB: teamB ? { name: teamB.name, power: teamB.power_rating } : null
+    });
 
     // 如果未找到队伍，抛出明确错误
     if (!teamA) {
@@ -884,8 +890,7 @@ export class MSIService {
     const teamsQuery = `SELECT id, name FROM teams WHERE id IN ($1, $2)`;
     const teamsResult = await client.query(teamsQuery, [winnerId, loserId]);
 
-    console.log(`[MSI DEBUG] 推进下一轮 - winnerId: ${winnerId}, loserId: ${loserId}`);
-    console.log(`[MSI DEBUG] 查询队伍结果:`, teamsResult.rows);
+    logger.debug('[MSI] 推进下一轮', { winnerId, loserId, queryResults: teamsResult.rows });
 
     // 统一使用字符串比较
     const winner = teamsResult.rows.find((t: any) => t.id.toString() === winnerId.toString());
@@ -899,18 +904,18 @@ export class MSIService {
       throw new BusinessError(ErrorCodes.TEAM_NOT_FOUND, `失败队伍 ${loserId} 不存在`);
     }
 
-    console.log(`[MSI DEBUG] 胜者: ${winner.name}, 败者: ${loser.name}`);
+    logger.debug('[MSI] 队伍匹配成功', { winner: winner.name, loser: loser.name });
 
     // 更新下一场比赛的队伍
     if (match.next_match_id) {
       // 胜者进入下一场
-      console.log(`[MSI DEBUG] 胜者 ${winner.name} 进入比赛 ${match.next_match_id}`);
+      logger.debug('[MSI] 胜者晋级', { winner: winner.name, nextMatchId: match.next_match_id });
       await this.updateNextMatchTeam(client, match.next_match_id, winnerId, winner.name);
     }
 
     if (match.loser_next_match_id) {
       // 败者进入败者组
-      console.log(`[MSI DEBUG] 败者 ${loser.name} 进入比赛 ${match.loser_next_match_id}`);
+      logger.debug('[MSI] 败者进入败者组', { loser: loser.name, loserNextMatchId: match.loser_next_match_id });
       await this.updateNextMatchTeam(client, match.loser_next_match_id, loserId, loser.name);
     }
   }
@@ -1088,7 +1093,7 @@ export class MSIService {
 
     for (const dist of distributions) {
       // TODO: 实际项目中应该调用积分服务更新年度积分
-      console.log(`队伍 ${dist.teamId} 获得MSI积分 ${dist.points} 分`);
+      logger.info('[MSI] 分配MSI积分', { teamId: dist.teamId, points: dist.points });
     }
   }
 

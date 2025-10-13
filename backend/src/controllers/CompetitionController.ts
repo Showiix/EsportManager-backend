@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { competitionService } from '../services/CompetitionService';
 import { scheduleService } from '../services/ScheduleService';
+import { matchService } from '../services/MatchService';
 import { CreateCompetitionDto, QueryOptions, ApiResponse, CompetitionStatus, CompetitionType } from '../types';
 
 export class CompetitionController {
@@ -346,6 +347,159 @@ export class CompetitionController {
       const response: ApiResponse<any> = {
         success: true,
         data: competition,
+        meta: {
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // 获取当前赛季活跃赛事的当前轮次
+  async getCurrentSeasonCurrentRound(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // 首先尝试获取活跃的赛事
+      let competitions = await competitionService.getActiveCompetitions();
+
+      // 如果没有活跃的赛事，尝试获取最近完成的赛事
+      if (competitions.length === 0) {
+        const options: QueryOptions = {
+          pagination: { page: 1, limit: 1, sortBy: 'updated_at', sortOrder: 'desc' },
+          filter: { status: 'completed' }
+        };
+        const { competitions: completedCompetitions } = await competitionService.getCompetitions(options);
+        competitions = completedCompetitions;
+      }
+
+      if (competitions.length === 0) {
+        const response: ApiResponse<any> = {
+          success: true,
+          data: { currentRound: 1, totalRounds: 18 },
+          meta: {
+            timestamp: new Date().toISOString(),
+            requestId: req.headers['x-request-id'] as string || 'unknown'
+          }
+        };
+        res.json(response);
+        return;
+      }
+
+      // 使用第一个赛事（活跃或最近完成的）
+      const currentRound = await scheduleService.getCurrentRound(competitions[0].id);
+
+      // 获取总轮次（从比赛中获取最大轮次）
+      const matches = await matchService.getMatchesByCompetition(String(competitions[0].id));
+      const totalRounds = matches && matches.length > 0
+        ? Math.max(...matches.map((m: any) => m.roundNumber || 0))
+        : 18;
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: {
+          currentRound,
+          totalRounds,
+          competitionStatus: competitions[0].status
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // 获取当前赛季所有比赛
+  async getCurrentSeasonMatches(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // 首先尝试获取活跃的赛事
+      let competitions = await competitionService.getActiveCompetitions();
+
+      // 如果没有活跃的赛事，尝试获取最近完成的赛事
+      if (competitions.length === 0) {
+        const options: QueryOptions = {
+          pagination: { page: 1, limit: 1, sortBy: 'updated_at', sortOrder: 'desc' },
+          filter: { status: 'completed' }
+        };
+        const { competitions: completedCompetitions } = await competitionService.getCompetitions(options);
+        competitions = completedCompetitions;
+      }
+
+      if (competitions.length === 0) {
+        const response: ApiResponse<any> = {
+          success: true,
+          data: [],
+          meta: {
+            timestamp: new Date().toISOString(),
+            requestId: req.headers['x-request-id'] as string || 'unknown'
+          }
+        };
+        res.json(response);
+        return;
+      }
+
+      // 获取该赛事的所有比赛
+      const matches = await matchService.getMatchesByCompetition(String(competitions[0].id));
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: matches || [],
+        meta: {
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // 获取当前赛季的赛事详情
+  async getCurrentSeasonCompetition(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // 首先尝试获取活跃的赛事
+      let competitions = await competitionService.getActiveCompetitions();
+
+      // 如果没有活跃的赛事，尝试获取最近完成的赛事（按更新时间倒序）
+      if (competitions.length === 0) {
+        const options: QueryOptions = {
+          pagination: { page: 1, limit: 1, sortBy: 'updated_at', sortOrder: 'desc' },
+          filter: { status: 'completed' }
+        };
+        const { competitions: completedCompetitions } = await competitionService.getCompetitions(options);
+        competitions = completedCompetitions;
+      }
+
+      if (competitions.length === 0) {
+        const response: ApiResponse<any> = {
+          success: false,
+          data: null,
+          meta: {
+            timestamp: new Date().toISOString(),
+            requestId: req.headers['x-request-id'] as string || 'unknown'
+          },
+          error: {
+            code: 'NOT_FOUND',
+            message: 'No competition found for current season'
+          }
+        };
+        res.status(404).json(response);
+        return;
+      }
+
+      // 返回第一个赛事（活跃或最近完成的）
+      const response: ApiResponse<any> = {
+        success: true,
+        data: competitions[0],
         meta: {
           timestamp: new Date().toISOString(),
           requestId: req.headers['x-request-id'] as string || 'unknown'

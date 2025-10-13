@@ -5,6 +5,7 @@
 import { PoolClient } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/config/database';
+import { logger } from '@/utils/logger';
 import {
   PlayoffBracket,
   PlayoffMatch,
@@ -18,6 +19,89 @@ import {
 } from '../types';
 
 export class PlayoffService {
+  /**
+   * 获取赛区所有季后赛
+   */
+  async getRegionPlayoffs(regionId: string, seasonId: string): Promise<PlayoffBracket[]> {
+    try {
+      // 1. 查询该赛区在指定赛季的所有季后赛对阵
+      const bracketsQuery = `
+        SELECT pb.*
+        FROM playoff_brackets pb
+        JOIN competitions c ON c.id = pb.competition_id
+        WHERE pb.region_id = $1 AND c.season_id = $2
+        ORDER BY pb.created_at DESC
+      `;
+      const bracketsResult = await db.query(bracketsQuery, [regionId, seasonId]);
+
+      if (bracketsResult.rows.length === 0) {
+        logger.info('该赛区在指定赛季没有季后赛数据', { regionId, seasonId });
+        return [];
+      }
+
+      // 2. 为每个bracket获取完整信息
+      const brackets: PlayoffBracket[] = [];
+
+      for (const bracketRow of bracketsResult.rows) {
+        // 获取所有比赛
+        const matchesQuery = `
+          SELECT * FROM playoff_matches
+          WHERE playoff_bracket_id = $1
+          ORDER BY round_number, id
+        `;
+        const matchesResult = await db.query(matchesQuery, [bracketRow.id]);
+        const matches = matchesResult.rows.map((row: any) => this.mapRowToMatch(row));
+
+        // 构建轮次信息
+        const rounds = this.buildPlayoffRounds(matches);
+
+        // 获取最终排名
+        let champion, runnerUp, thirdPlace, fourthPlace;
+
+        if (bracketRow.champion_id) {
+          champion = await this.getTeamQualification(bracketRow.champion_id, bracketRow.qualified_teams);
+        }
+        if (bracketRow.runner_up_id) {
+          runnerUp = await this.getTeamQualification(bracketRow.runner_up_id, bracketRow.qualified_teams);
+        }
+        if (bracketRow.third_place_id) {
+          thirdPlace = await this.getTeamQualification(bracketRow.third_place_id, bracketRow.qualified_teams);
+        }
+        if (bracketRow.fourth_place_id) {
+          fourthPlace = await this.getTeamQualification(bracketRow.fourth_place_id, bracketRow.qualified_teams);
+        }
+
+        brackets.push({
+          id: bracketRow.id,
+          competitionId: bracketRow.competition_id,
+          regionId: bracketRow.region_id.toString(),
+          regionName: bracketRow.region_name,
+          competitionType: bracketRow.competition_type,
+          status: bracketRow.status,
+          qualifiedTeams: bracketRow.qualified_teams,
+          rounds,
+          champion,
+          runnerUp,
+          thirdPlace,
+          fourthPlace,
+          pointsDistribution: bracketRow.points_distribution,
+          createdAt: bracketRow.created_at,
+          updatedAt: bracketRow.updated_at
+        });
+      }
+
+      logger.info('成功获取赛区季后赛数据', { regionId, seasonId, count: brackets.length });
+      return brackets;
+    } catch (error: any) {
+      logger.error('获取赛区季后赛失败', { error: error.message, regionId, seasonId });
+      throw new BusinessError(
+        ErrorCodes.PLAYOFF_NOT_FOUND,
+        '获取赛区季后赛失败',
+        error.message
+      );
+    }
+  }
+
   /**
    * 检查是否可以生成季后赛
    */
@@ -77,7 +161,7 @@ export class PlayoffService {
         qualifiedTeams
       };
     } catch (error: any) {
-      console.error('检查季后赛资格失败:', error);
+      logger.error('检查季后赛资格失败', { error: error.message, competitionId, regionId });
       throw new BusinessError(
         ErrorCodes.INVALID_COMPETITION_FORMAT,
         '检查季后赛资格失败',
@@ -114,7 +198,7 @@ export class PlayoffService {
 
       // 如果regional_standings没有数据,从matches表实时计算
       if (result.rows.length === 0) {
-        console.log(`regional_standings表无数据,从matches表计算赛区${regionId}的排名...`);
+        logger.info('regional_standings表无数据,从matches表实时计算', { regionId });
 
         const matchesQuery = `
           WITH team_stats AS (
@@ -158,7 +242,7 @@ export class PlayoffService {
       }
 
       if (result.rows.length < 4) {
-        console.warn(`赛区${regionId}只有${result.rows.length}支晋级队伍,少于4支`);
+        logger.warn('赛区晋级队伍不足4支', { regionId, teamCount: result.rows.length });
       }
 
       return result.rows.map((row: any, index: number) => ({
@@ -172,7 +256,7 @@ export class PlayoffService {
         losses: row.losses || 0
       }));
     } catch (error: any) {
-      console.error('获取晋级队伍失败:', error);
+      logger.error('获取晋级队伍失败', { error: error.message, competitionId, regionId });
       throw new BusinessError(
         ErrorCodes.TEAM_NOT_FOUND,
         '获取晋级队伍失败',
@@ -263,7 +347,7 @@ export class PlayoffService {
       };
     } catch (error: any) {
       await client.query('ROLLBACK');
-      console.error('生成季后赛失败:', error);
+      logger.error('生成季后赛失败', { error: error.message, request });
 
       if (error instanceof BusinessError) {
         throw error;
@@ -485,7 +569,7 @@ export class PlayoffService {
         updatedAt: bracket.updated_at
       };
     } catch (error: any) {
-      console.error('获取季后赛对阵失败:', error);
+      logger.error('获取季后赛对阵失败', { error: error.message, competitionId, regionId });
       throw new BusinessError(
         ErrorCodes.PLAYOFF_NOT_FOUND,
         '获取季后赛对阵失败',
@@ -580,7 +664,7 @@ export class PlayoffService {
       };
     } catch (error: any) {
       await client.query('ROLLBACK');
-      console.error('模拟季后赛比赛失败:', error);
+      logger.error('模拟季后赛比赛失败', { error: error.message, request });
 
       if (error instanceof BusinessError) {
         throw error;
@@ -609,15 +693,20 @@ export class PlayoffService {
     const teamsQuery = `SELECT id, power_rating, name FROM teams WHERE id IN ($1, $2)`;
     const teamsResult = await client.query(teamsQuery, [teamAId, teamBId]);
 
-    console.log(`[DEBUG] 查询队伍实力 - teamAId: ${teamAId}, teamBId: ${teamBId}`);
-    console.log(`[DEBUG] 查询结果:`, teamsResult.rows.map((r: any) => ({ id: r.id, type: typeof r.id, name: r.name })));
+    logger.debug('查询队伍实力', {
+      teamAId,
+      teamBId,
+      results: teamsResult.rows.map((r: any) => ({ id: r.id, type: typeof r.id, name: r.name }))
+    });
 
     // 统一使用字符串比较
     const teamA = teamsResult.rows.find((t: any) => t.id.toString() === teamAId.toString());
     const teamB = teamsResult.rows.find((t: any) => t.id.toString() === teamBId.toString());
 
-    console.log(`[DEBUG] teamA:`, teamA ? `${teamA.name} (power: ${teamA.power_rating})` : 'undefined');
-    console.log(`[DEBUG] teamB:`, teamB ? `${teamB.name} (power: ${teamB.power_rating})` : 'undefined');
+    logger.debug('匹配队伍结果', {
+      teamA: teamA ? { name: teamA.name, power: teamA.power_rating } : null,
+      teamB: teamB ? { name: teamB.name, power: teamB.power_rating } : null
+    });
 
     // 如果未找到队伍，抛出明确错误
     if (!teamA) {
@@ -666,8 +755,7 @@ export class PlayoffService {
     const teamsQuery = `SELECT id, name FROM teams WHERE id IN ($1, $2)`;
     const teamsResult = await client.query(teamsQuery, [winnerId, loserId]);
 
-    console.log(`[DEBUG] 推进下一轮 - winnerId: ${winnerId}, loserId: ${loserId}`);
-    console.log(`[DEBUG] 查询队伍结果:`, teamsResult.rows);
+    logger.debug('推进下一轮', { winnerId, loserId, queryResults: teamsResult.rows });
 
     // 统一使用字符串比较
     const winner = teamsResult.rows.find((t: any) => t.id.toString() === winnerId.toString());
@@ -681,18 +769,18 @@ export class PlayoffService {
       throw new BusinessError(ErrorCodes.TEAM_NOT_FOUND, `失败队伍 ${loserId} 不存在`);
     }
 
-    console.log(`[DEBUG] 胜者: ${winner.name}, 败者: ${loser.name}`);
+    logger.debug('队伍匹配成功', { winner: winner.name, loser: loser.name });
 
     // 更新下一场比赛的队伍
     if (match.next_match_id) {
       // 胜者进入下一场
-      console.log(`[DEBUG] 胜者 ${winner.name} 进入比赛 ${match.next_match_id}`);
+      logger.debug('胜者晋级', { winner: winner.name, nextMatchId: match.next_match_id });
       await this.updateNextMatchTeam(client, match.next_match_id, winnerId, winner.name);
     }
 
     if (match.loser_next_match_id) {
       // 败者进入败者组
-      console.log(`[DEBUG] 败者 ${loser.name} 进入比赛 ${match.loser_next_match_id}`);
+      logger.debug('败者进入败者组', { loser: loser.name, loserNextMatchId: match.loser_next_match_id });
       await this.updateNextMatchTeam(client, match.loser_next_match_id, loserId, loser.name);
     }
   }
@@ -823,7 +911,7 @@ export class PlayoffService {
 
     for (const dist of distributions) {
       // TODO: 实际项目中应该调用积分服务更新年度积分
-      console.log(`队伍 ${dist.teamId} 获得 ${dist.points} 积分`);
+      logger.info('分配季后赛积分', { teamId: dist.teamId, points: dist.points });
     }
   }
 

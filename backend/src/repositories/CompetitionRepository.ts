@@ -35,13 +35,17 @@ export class CompetitionRepository {
     return result.rows[0];
   }
 
-  // 根据ID获取赛事
+  // 根据ID或competition_code获取赛事
   async findById(id: string, options?: QueryOptions): Promise<Competition | null> {
+    // 判断是competition_code还是id
+    const isNumeric = /^\d+$/.test(id);
+    const queryField = isNumeric ? 'c.id' : 'c.competition_code';
+
     const query = `
-      SELECT c.*, s.name as season_name, s.year as season_year
+      SELECT c.*, s.name as season_name, s.year as season_year, s.season_code
       FROM competitions c
       LEFT JOIN seasons s ON c.season_id = s.id
-      WHERE c.id = $1
+      WHERE ${queryField} = $1
     `;
 
     const result = await databaseService.query(query, [id]);
@@ -91,7 +95,7 @@ export class CompetitionRepository {
   // 获取所有赛事
   async findAll(options?: QueryOptions): Promise<Competition[]> {
     let query = `
-      SELECT c.*, s.name as season_name, s.year as season_year
+      SELECT c.*, s.name as season_name, s.year as season_year, s.season_code
       FROM competitions c
       LEFT JOIN seasons s ON c.season_id = s.id
       WHERE 1=1
@@ -187,7 +191,7 @@ export class CompetitionRepository {
   // 根据赛季获取赛事
   async findBySeason(seasonId: string): Promise<Competition[]> {
     const query = `
-      SELECT c.*, s.name as season_name, s.year as season_year
+      SELECT c.*, s.name as season_name, s.year as season_year, s.season_code
       FROM competitions c
       JOIN seasons s ON c.season_id = s.id
       WHERE c.season_id = $1
@@ -197,11 +201,19 @@ export class CompetitionRepository {
     const result = await databaseService.query(query, [seasonId]);
 
     return result.rows.map(competition => {
-      if (competition.format) {
-        competition.format = JSON.parse(competition.format);
+      if (competition.format && typeof competition.format === 'string') {
+        try {
+          competition.format = JSON.parse(competition.format);
+        } catch (e) {
+          competition.format = {};
+        }
       }
-      if (competition.scoring_rules) {
-        competition.scoringRules = JSON.parse(competition.scoring_rules);
+      if (competition.scoring_rules && typeof competition.scoring_rules === 'string') {
+        try {
+          competition.scoringRules = JSON.parse(competition.scoring_rules);
+        } catch (e) {
+          competition.scoringRules = {};
+        }
       }
       return competition;
     });
@@ -210,7 +222,7 @@ export class CompetitionRepository {
   // 根据类型和年份获取赛事
   async findByTypeAndYear(type: CompetitionType, year: number): Promise<Competition[]> {
     const query = `
-      SELECT c.*, s.name as season_name, s.year as season_year
+      SELECT c.*, s.name as season_name, s.year as season_year, s.season_code
       FROM competitions c
       JOIN seasons s ON c.season_id = s.id
       WHERE c.type = $1 AND s.year = $2
@@ -220,11 +232,19 @@ export class CompetitionRepository {
     const result = await databaseService.query(query, [type, year]);
 
     return result.rows.map(competition => {
-      if (competition.format) {
-        competition.format = JSON.parse(competition.format);
+      if (competition.format && typeof competition.format === 'string') {
+        try {
+          competition.format = JSON.parse(competition.format);
+        } catch (e) {
+          competition.format = {};
+        }
       }
-      if (competition.scoring_rules) {
-        competition.scoringRules = JSON.parse(competition.scoring_rules);
+      if (competition.scoring_rules && typeof competition.scoring_rules === 'string') {
+        try {
+          competition.scoringRules = JSON.parse(competition.scoring_rules);
+        } catch (e) {
+          competition.scoringRules = {};
+        }
       }
       return competition;
     });
@@ -278,7 +298,7 @@ export class CompetitionRepository {
   // 获取活跃赛事
   async findActive(): Promise<Competition[]> {
     const query = `
-      SELECT c.*, s.name as season_name, s.year as season_year
+      SELECT c.*, s.name as season_name, s.year as season_year, s.season_code
       FROM competitions c
       JOIN seasons s ON c.season_id = s.id
       WHERE c.status = 'active'
@@ -288,11 +308,19 @@ export class CompetitionRepository {
     const result = await databaseService.query(query);
 
     return result.rows.map(competition => {
-      if (competition.format) {
-        competition.format = JSON.parse(competition.format);
+      if (competition.format && typeof competition.format === 'string') {
+        try {
+          competition.format = JSON.parse(competition.format);
+        } catch (e) {
+          competition.format = {};
+        }
       }
-      if (competition.scoring_rules) {
-        competition.scoringRules = JSON.parse(competition.scoring_rules);
+      if (competition.scoring_rules && typeof competition.scoring_rules === 'string') {
+        try {
+          competition.scoringRules = JSON.parse(competition.scoring_rules);
+        } catch (e) {
+          competition.scoringRules = {};
+        }
       }
       return competition;
     });
@@ -301,7 +329,7 @@ export class CompetitionRepository {
   // 获取即将开始的赛事
   async findUpcoming(limit?: number): Promise<Competition[]> {
     let query = `
-      SELECT c.*, s.name as season_name, s.year as season_year
+      SELECT c.*, s.name as season_name, s.year as season_year, s.season_code
       FROM competitions c
       JOIN seasons s ON c.season_id = s.id
       WHERE c.status = 'planning' AND c.start_date > CURRENT_DATE
@@ -316,11 +344,19 @@ export class CompetitionRepository {
     const result = await databaseService.query(query, params);
 
     return result.rows.map(competition => {
-      if (competition.format) {
-        competition.format = JSON.parse(competition.format);
+      if (competition.format && typeof competition.format === 'string') {
+        try {
+          competition.format = JSON.parse(competition.format);
+        } catch (e) {
+          competition.format = {};
+        }
       }
-      if (competition.scoring_rules) {
-        competition.scoringRules = JSON.parse(competition.scoring_rules);
+      if (competition.scoring_rules && typeof competition.scoring_rules === 'string') {
+        try {
+          competition.scoringRules = JSON.parse(competition.scoring_rules);
+        } catch (e) {
+          competition.scoringRules = {};
+        }
       }
       return competition;
     });

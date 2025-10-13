@@ -7,6 +7,7 @@ import { rankingController } from '../controllers/RankingController';
 import { honorHallController } from '../controllers/HonorHallController';
 import { playoffController } from '../controllers/PlayoffController';
 import { msiController } from '../controllers/MSIController';
+import { seasonController } from '../controllers/SeasonController';
 
 const router = Router();
 
@@ -53,24 +54,50 @@ router.put('/regions/:id', regionController.updateRegion.bind(regionController))
 router.get('/regions/:id/statistics', regionController.getRegionStatistics.bind(regionController));
 
 // =================================================================
+// 赛季管理路由
+// =================================================================
+
+// 获取所有赛季
+router.get('/seasons', seasonController.getSeasons.bind(seasonController));
+
+// 获取当前活跃赛季
+router.get('/seasons/current', seasonController.getCurrentSeason.bind(seasonController));
+
+// 获取赛季详情
+router.get('/seasons/:id', seasonController.getSeasonById.bind(seasonController));
+
+// 赛季推进
+router.post('/seasons/:seasonId/proceed-to-summer', seasonController.proceedToSummer.bind(seasonController));
+
+// 获取赛季进度
+router.get('/seasons/:seasonId/progress', seasonController.getSeasonProgress.bind(seasonController));
+
+// =================================================================
 // 赛事管理路由
 // =================================================================
 
 // 赛事CRUD操作
 router.post('/competitions', competitionController.createCompetition.bind(competitionController));
 router.get('/competitions', competitionController.getCompetitions.bind(competitionController));
+
+// 特殊路由：当前赛季相关（必须在 :id 路由之前）
+router.get('/competitions/current-season/current-round', competitionController.getCurrentSeasonCurrentRound.bind(competitionController));
+router.get('/competitions/current-season/matches', competitionController.getCurrentSeasonMatches.bind(competitionController));
+router.get('/competitions/current-season', competitionController.getCurrentSeasonCompetition.bind(competitionController));
+
+// 根据类型和年份获取赛事（放在 :id 之前避免冲突）
+router.get('/competitions/type/:type/year/:year', competitionController.getCompetitionsByTypeAndYear.bind(competitionController));
+
+// 活跃和即将开始的赛事（放在 :id 之前避免冲突）
+router.get('/competitions/active', competitionController.getActiveCompetitions.bind(competitionController));
+router.get('/competitions/upcoming', competitionController.getUpcomingCompetitions.bind(competitionController));
+
+// 赛事详情和操作（带 :id 的路由）
 router.get('/competitions/:id', competitionController.getCompetitionById.bind(competitionController));
 router.put('/competitions/:id/status', competitionController.updateCompetitionStatus.bind(competitionController));
 
 // 根据赛季获取赛事
 router.get('/seasons/:seasonId/competitions', competitionController.getCompetitionsBySeason.bind(competitionController));
-
-// 根据类型和年份获取赛事
-router.get('/competitions/type/:type/year/:year', competitionController.getCompetitionsByTypeAndYear.bind(competitionController));
-
-// 活跃和即将开始的赛事
-router.get('/competitions/active', competitionController.getActiveCompetitions.bind(competitionController));
-router.get('/competitions/upcoming', competitionController.getUpcomingCompetitions.bind(competitionController));
 
 // 赛事参赛队伍管理
 router.get('/competitions/:id/teams', competitionController.getCompetitionTeams.bind(competitionController));

@@ -118,11 +118,15 @@ export class PlayoffController {
         return;
       }
 
-      // TODO: 实现获取赛区所有季后赛的逻辑
-      // 这里暂时返回空数组
+      // 实现获取赛区所有季后赛的逻辑
+      const brackets = await playoffService.getRegionPlayoffs(
+        regionId as string,
+        seasonId as string
+      );
+
       const response: ApiResponse<any[]> = {
         success: true,
-        data: [],
+        data: brackets,
         meta: {
           timestamp: new Date().toISOString(),
           requestId: req.headers['x-request-id'] as string || 'unknown'

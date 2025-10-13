@@ -1,0 +1,580 @@
+// =================================================================
+// 电竞赛事模拟系统 - 赛季管理服务
+// =================================================================
+
+import { CompetitionRepository } from '../repositories/CompetitionRepository';
+import { competitionService } from './CompetitionService';
+import {
+  BusinessError,
+  ErrorCodes,
+  CompetitionStatus,
+  CompetitionType,
+  MatchFormat
+} from '../types';
+import { logger } from '../utils/logger';
+import { db } from '../config/database';
+
+export class SeasonService {
+  private competitionRepository: CompetitionRepository;
+
+  constructor() {
+    this.competitionRepository = new CompetitionRepository();
+  }
+
+  /**
+   * MSI结束后推进到夏季赛
+   * 为4个赛区分别生成夏季赛并生成赛程
+   * @param seasonId 赛季ID
+   * @returns 生成的夏季赛信息
+   */
+  async proceedToSummer(seasonId: string): Promise<{
+    summerCompetitions: any[];
+    totalMatchesGenerated: number;
+    regionResults: Array<{
+      regionId: number;
+      regionName: string;
+      competitionId: string;
+      matchesGenerated: number;
+      success: boolean;
+      error?: string;
+    }>;
+  }> {
+    try {
+      logger.info('开始推进到夏季赛（多赛区模式）', { seasonId });
+
+      // 1. 验证当前赛季状态（检查MSI是否完成）
+      await this.validateSeasonProgression(seasonId);
+
+      // 2. 获取所有赛区信息
+      const regionsResult = await db.query(
+        `SELECT id, name, code FROM regions ORDER BY id`
+      );
+      const regions = regionsResult.rows;
+
+      if (regions.length === 0) {
+        throw new BusinessError(
+          ErrorCodes.TEAM_NOT_FOUND,
+          '找不到赛区数据'
+        );
+      }
+
+      logger.info('找到赛区', {
+        count: regions.length,
+        regions: regions.map((r: any) => ({ id: r.id, name: r.name, code: r.code }))
+      });
+
+      // 3. 为每个赛区创建夏季赛
+      const summerCompetitions: any[] = [];
+      const regionResults: Array<{
+        regionId: number;
+        regionName: string;
+        competitionId: string;
+        matchesGenerated: number;
+        success: boolean;
+        error?: string;
+      }> = [];
+      let totalMatchesGenerated = 0;
+
+      for (const region of regions) {
+        try {
+          logger.info('为赛区创建夏季赛', {
+            regionId: region.id,
+            regionName: region.name
+          });
+
+          // 检查该赛区的夏季赛是否已存在（通过赛事名称判断）
+          const existingSummerResult = await db.query(
+            `SELECT id, status FROM competitions
+             WHERE season_id = $1 AND type = 'summer' AND name LIKE $2`,
+            [seasonId, `%${region.name}%夏季赛%`]
+          );
+
+          let summerCompetition: any;
+
+          if (existingSummerResult.rows.length > 0) {
+            // 夏季赛已存在
+            summerCompetition = existingSummerResult.rows[0];
+            logger.info('夏季赛已存在', {
+              regionId: region.id,
+              competitionId: summerCompetition.id,
+              status: summerCompetition.status
+            });
+
+            // 如果已经完成，跳过
+            if (summerCompetition.status === CompetitionStatus.COMPLETED) {
+              regionResults.push({
+                regionId: region.id,
+                regionName: region.name,
+                competitionId: summerCompetition.id,
+                matchesGenerated: 0,
+                success: true,
+                error: '夏季赛已完成'
+              });
+              continue;
+            }
+
+            // 如果已经激活，跳过生成赛程
+            if (summerCompetition.status === CompetitionStatus.ACTIVE) {
+              regionResults.push({
+                regionId: region.id,
+                regionName: region.name,
+                competitionId: summerCompetition.id,
+                matchesGenerated: 0,
+                success: true,
+                error: '夏季赛已激活'
+              });
+              summerCompetitions.push(summerCompetition);
+              continue;
+            }
+          } else {
+            // 创建新的夏季赛
+            const competitionData = {
+              name: `${region.name} 2025 夏季赛`,
+              type: CompetitionType.SUMMER,
+              seasonId,
+              // 注意：competitions 表没有 region_id 字段，通过 competition_teams 关联推断赛区
+              startDate: new Date(),
+              endDate: new Date(new Date().setMonth(new Date().getMonth() + 3)),
+              format: {
+                type: 'league',
+                regularSeason: {
+                  format: 'round-robin',
+                  matchFormat: MatchFormat.BO3
+                }
+              },
+              scoringRules: {
+                regular: {
+                  '2-0': 3,  // 2:0胜积3分
+                  '2-1': 2,  // 2:1胜积2分
+                  '1-2': 1,  // 2:1负积1分
+                  '0-2': 0   // 2:0负积0分
+                }
+              },
+              maxTeams: 10 // 每个赛区10支队伍
+            };
+
+            summerCompetition = await competitionService.createCompetition(competitionData);
+            logger.info('夏季赛创建成功', {
+              regionId: region.id,
+              competitionId: summerCompetition.id
+            });
+          }
+
+          // 4. 为夏季赛添加参赛队伍（该赛区的所有队伍）
+          await this.setupSummerTeamsForRegion(summerCompetition.id, region.id);
+
+          // 5. 生成夏季赛赛程
+          logger.info('开始生成夏季赛赛程', {
+            regionId: region.id,
+            competitionId: summerCompetition.id
+          });
+
+          const matches = await competitionService.generateSchedule(summerCompetition.id);
+
+          logger.info('夏季赛赛程生成成功', {
+            regionId: region.id,
+            competitionId: summerCompetition.id,
+            matchesGenerated: matches.length
+          });
+
+          summerCompetitions.push(summerCompetition);
+          totalMatchesGenerated += matches.length;
+
+          regionResults.push({
+            regionId: region.id,
+            regionName: region.name,
+            competitionId: summerCompetition.id,
+            matchesGenerated: matches.length,
+            success: true
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '未知错误';
+          logger.error('赛区夏季赛生成失败', {
+            regionId: region.id,
+            regionName: region.name,
+            error: errorMessage
+          });
+
+          regionResults.push({
+            regionId: region.id,
+            regionName: region.name,
+            competitionId: '',
+            matchesGenerated: 0,
+            success: false,
+            error: errorMessage
+          });
+        }
+      }
+
+      logger.info('夏季赛推进完成', {
+        seasonId,
+        totalCompetitions: summerCompetitions.length,
+        totalMatchesGenerated,
+        successfulRegions: regionResults.filter(r => r.success).length,
+        failedRegions: regionResults.filter(r => !r.success).length
+      });
+
+      return {
+        summerCompetitions,
+        totalMatchesGenerated,
+        regionResults
+      };
+    } catch (error) {
+      if (error instanceof BusinessError) {
+        throw error;
+      }
+      logger.error('推进到夏季赛失败', {
+        seasonId,
+        error: error instanceof Error ? error.message : error
+      });
+      throw new Error('推进到夏季赛失败');
+    }
+  }
+
+  /**
+   * 验证赛季推进条件
+   */
+  private async validateSeasonProgression(seasonId: string): Promise<void> {
+    // 1. 验证春季赛是否完成
+    const springCompetitions = await this.competitionRepository.findAll({
+      filter: {
+        seasonId,
+        type: CompetitionType.SPRING
+      }
+    });
+
+    if (springCompetitions.length === 0) {
+      throw new BusinessError(
+        ErrorCodes.COMPETITION_NOT_ACTIVE,
+        '找不到春季赛'
+      );
+    }
+
+    const springCompetition = springCompetitions[0];
+    if (springCompetition.status !== CompetitionStatus.COMPLETED) {
+      throw new BusinessError(
+        ErrorCodes.REGULAR_SEASON_NOT_COMPLETE,
+        '春季赛尚未完成'
+      );
+    }
+
+    // 2. 验证春季赛季后赛是否完成（检查所有赛区）
+    const result = await db.query(
+      `SELECT pb.status, pb.region_id, pb.region_name
+       FROM playoff_brackets pb
+       INNER JOIN competitions c ON pb.competition_id = c.id
+       WHERE c.season_id = $1 AND pb.competition_type = 'spring'`,
+      [seasonId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new BusinessError(
+        ErrorCodes.REGULAR_SEASON_NOT_COMPLETE,
+        '春季赛季后赛尚未生成'
+      );
+    }
+
+    // 检查所有赛区的季后赛都已完成
+    const incompletePlayoffs = result.rows.filter((row: any) => row.status !== 'completed');
+    if (incompletePlayoffs.length > 0) {
+      const incompleteRegions = incompletePlayoffs.map((r: any) => r.region_name).join(', ');
+      throw new BusinessError(
+        ErrorCodes.REGULAR_SEASON_NOT_COMPLETE,
+        `以下赛区的春季赛季后赛尚未完成: ${incompleteRegions}`
+      );
+    }
+
+    // 3. 验证MSI是否完成
+    const msiResult = await db.query(
+      `SELECT status FROM msi_brackets WHERE season_id = $1`,
+      [seasonId]
+    );
+
+    if (msiResult.rows.length === 0) {
+      throw new BusinessError(
+        ErrorCodes.COMPETITION_NOT_ACTIVE,
+        'MSI尚未生成'
+      );
+    }
+
+    const msiStatus = msiResult.rows[0].status;
+    if (msiStatus !== 'completed') {
+      throw new BusinessError(
+        ErrorCodes.COMPETITION_NOT_ACTIVE,
+        'MSI尚未完成'
+      );
+    }
+
+    logger.info('赛季推进验证通过', {
+      seasonId,
+      springStatus: springCompetition.status,
+      playoffCompleted: result.rows.length,
+      msiStatus: msiResult.rows[0].status
+    });
+  }
+
+  /**
+   * 获取夏季赛
+   */
+  private async getSummerCompetition(seasonId: string): Promise<any> {
+    const summerCompetitions = await this.competitionRepository.findAll({
+      filter: {
+        seasonId,
+        type: CompetitionType.SUMMER
+      }
+    });
+
+    if (summerCompetitions.length === 0) {
+      throw new BusinessError(
+        ErrorCodes.COMPETITION_NOT_ACTIVE,
+        '找不到夏季赛'
+      );
+    }
+
+    return summerCompetitions[0];
+  }
+
+  /**
+   * 为特定赛区的夏季赛设置参赛队伍
+   */
+  private async setupSummerTeamsForRegion(
+    summerCompetitionId: string,
+    regionId: number
+  ): Promise<void> {
+    try {
+      logger.info('开始为赛区夏季赛设置参赛队伍', {
+        summerCompetitionId,
+        regionId
+      });
+
+      // 查询该赛区的所有队伍
+      const teamsResult = await db.query(
+        `SELECT id, name, region_id FROM teams WHERE region_id = $1 ORDER BY id`,
+        [regionId]
+      );
+
+      const teams = teamsResult.rows;
+
+      if (teams.length === 0) {
+        throw new BusinessError(
+          ErrorCodes.TEAM_NOT_FOUND,
+          `赛区 ${regionId} 找不到队伍数据`
+        );
+      }
+
+      logger.info('找到赛区队伍', {
+        regionId,
+        teamsCount: teams.length,
+        teams: teams.map((t: any) => ({ id: t.id, name: t.name }))
+      });
+
+      // 为每支队伍添加到夏季赛
+      for (const team of teams) {
+        await competitionService.addTeamToCompetition(
+          summerCompetitionId,
+          String(team.id),
+          undefined, // 不设置种子位
+          undefined  // 不设置分组
+        );
+      }
+
+      logger.info('赛区夏季赛参赛队伍设置完成', {
+        summerCompetitionId,
+        regionId,
+        teamsCount: teams.length
+      });
+    } catch (error) {
+      logger.error('设置赛区夏季赛参赛队伍失败', {
+        summerCompetitionId,
+        regionId,
+        error: error instanceof Error ? error.message : error
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * 为夏季赛设置参赛队伍（所有赛区）
+   * @deprecated 使用 setupSummerTeamsForRegion 代替
+   */
+  private async setupSummerTeams(
+    summerCompetitionId: string,
+    seasonId: string
+  ): Promise<void> {
+    try {
+      logger.info('开始为夏季赛设置参赛队伍', {
+        summerCompetitionId,
+        seasonId
+      });
+
+      // 查询所有队伍（夏季赛使用相同的40支队伍）
+      const teamsResult = await db.query(
+        `SELECT id, region_id FROM teams ORDER BY id`
+      );
+
+      const teams = teamsResult.rows;
+
+      if (teams.length === 0) {
+        throw new BusinessError(
+          ErrorCodes.TEAM_NOT_FOUND,
+          '找不到队伍数据'
+        );
+      }
+
+      // 为每支队伍添加到夏季赛
+      for (const team of teams) {
+        await competitionService.addTeamToCompetition(
+          summerCompetitionId,
+          String(team.id),
+          undefined, // 不设置种子位
+          undefined  // 不设置分组
+        );
+      }
+
+      logger.info('夏季赛参赛队伍设置完成', {
+        summerCompetitionId,
+        teamsCount: teams.length
+      });
+    } catch (error) {
+      logger.error('设置夏季赛参赛队伍失败', {
+        summerCompetitionId,
+        error: error instanceof Error ? error.message : error
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * 获取当前赛季的进度信息（支持season_id或season_code）
+   */
+  async getSeasonProgress(seasonId: string): Promise<{
+    currentPhase: string;
+    springCompleted: boolean;
+    springPlayoffCompleted: boolean;
+    msiCompleted: boolean;
+    summerCompleted: boolean;
+    summerPlayoffCompleted: boolean;
+    worldsCompleted: boolean;
+    canProceedToSummer: boolean;
+    canProceedToWorlds: boolean;
+  }> {
+    try {
+      // 判断是season_code还是id，如果是season_code则先获取实际的season_id
+      let actualSeasonId = seasonId;
+      const isNumeric = /^\d+$/.test(seasonId);
+
+      if (!isNumeric) {
+        // 传入的是season_code，需要查询实际的id
+        const seasonResult = await db.query(
+          `SELECT id FROM seasons WHERE season_code = $1`,
+          [seasonId]
+        );
+
+        if (seasonResult.rows.length === 0) {
+          throw new Error(`找不到赛季: ${seasonId}`);
+        }
+
+        actualSeasonId = String(seasonResult.rows[0].id);
+        logger.info('通过season_code查询赛季ID', {
+          seasonCode: seasonId,
+          seasonId: actualSeasonId
+        });
+      }
+
+      // 查询春季赛状态
+      const springResult = await db.query(
+        `SELECT status FROM competitions WHERE season_id = $1 AND type = 'spring'`,
+        [actualSeasonId]
+      );
+      const springCompleted = springResult.rows.length > 0 &&
+        springResult.rows[0].status === 'completed';
+
+      // 查询春季赛季后赛状态（通过competition_id JOIN competitions表）
+      const springPlayoffResult = await db.query(
+        `SELECT pb.status
+         FROM playoff_brackets pb
+         JOIN competitions c ON pb.competition_id = c.id
+         WHERE c.season_id = $1 AND pb.competition_type = 'spring'`,
+        [actualSeasonId]
+      );
+      const springPlayoffCompleted = springPlayoffResult.rows.length > 0 &&
+        springPlayoffResult.rows[0].status === 'completed';
+
+      // 查询MSI状态
+      const msiResult = await db.query(
+        `SELECT status FROM msi_brackets WHERE season_id = $1`,
+        [actualSeasonId]
+      );
+      const msiCompleted = msiResult.rows.length > 0 &&
+        msiResult.rows[0].status === 'completed';
+
+      // 查询夏季赛状态
+      const summerResult = await db.query(
+        `SELECT status FROM competitions WHERE season_id = $1 AND type = 'summer'`,
+        [actualSeasonId]
+      );
+      const summerCompleted = summerResult.rows.length > 0 &&
+        summerResult.rows[0].status === 'completed';
+
+      // 查询夏季赛季后赛状态（通过competition_id JOIN competitions表）
+      const summerPlayoffResult = await db.query(
+        `SELECT pb.status
+         FROM playoff_brackets pb
+         JOIN competitions c ON pb.competition_id = c.id
+         WHERE c.season_id = $1 AND pb.competition_type = 'summer'`,
+        [actualSeasonId]
+      );
+      const summerPlayoffCompleted = summerPlayoffResult.rows.length > 0 &&
+        summerPlayoffResult.rows[0].status === 'completed';
+
+      // 查询世界赛状态
+      const worldsResult = await db.query(
+        `SELECT status FROM competitions WHERE season_id = $1 AND type = 'worlds'`,
+        [actualSeasonId]
+      );
+      const worldsCompleted = worldsResult.rows.length > 0 &&
+        worldsResult.rows[0].status === 'completed';
+
+      // 判断当前阶段
+      let currentPhase = 'spring'; // 默认春季赛
+      if (worldsCompleted) {
+        currentPhase = 'completed';
+      } else if (summerPlayoffCompleted) {
+        currentPhase = 'worlds';
+      } else if (summerCompleted) {
+        currentPhase = 'summer_playoff';
+      } else if (msiCompleted) {
+        currentPhase = 'summer';
+      } else if (springPlayoffCompleted) {
+        currentPhase = 'msi';
+      } else if (springCompleted) {
+        currentPhase = 'spring_playoff';
+      }
+
+      // 判断是否可以推进
+      const canProceedToSummer = springCompleted && springPlayoffCompleted && msiCompleted;
+      const canProceedToWorlds = summerCompleted && summerPlayoffCompleted;
+
+      return {
+        currentPhase,
+        springCompleted,
+        springPlayoffCompleted,
+        msiCompleted,
+        summerCompleted,
+        summerPlayoffCompleted,
+        worldsCompleted,
+        canProceedToSummer,
+        canProceedToWorlds
+      };
+    } catch (error) {
+      logger.error('获取赛季进度失败', {
+        seasonId,
+        error: error instanceof Error ? error.message : error
+      });
+      throw new Error('获取赛季进度失败');
+    }
+  }
+}
+
+// 单例导出
+export const seasonService = new SeasonService();
