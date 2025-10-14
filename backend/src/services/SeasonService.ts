@@ -490,12 +490,41 @@ export class SeasonService {
         );
       }
       
-      // 3. 检查是否是super年（偶数赛季）
-      // S2, S4, S6... 是super年，需要先完成洲际赛
+      // 3. 检查洲际赛是否完成
+      // S1, S3, S5... (奇数赛季) → C洲际赛（Clauch）
+      // S2, S4, S6... (偶数赛季) → Super洲际赛
       const seasonCode = currentSeason.season_code; // 如 "S1", "S2"
       const seasonNumber = parseInt(seasonCode.substring(1)); // S1 → 1, S2 → 2
       
-      if (seasonNumber % 2 === 0) {
+      if (seasonNumber % 2 === 1) {
+        // 奇数赛季，检查C洲际赛是否完成
+        const clauchResult = await client.query(
+          `SELECT cb.id, cb.status
+           FROM clauch_brackets cb
+           WHERE cb.season_id = $1`,
+          [seasonId]
+        );
+        
+        if (clauchResult.rows.length === 0) {
+          throw new BusinessError(
+            ErrorCodes.COMPETITION_NOT_ACTIVE,
+            `${seasonCode}赛季是C洲际赛年，但C洲际赛尚未生成`
+          );
+        }
+        
+        if (clauchResult.rows[0].status !== 'completed') {
+          throw new BusinessError(
+            ErrorCodes.COMPETITION_NOT_ACTIVE,
+            `${seasonCode}赛季是C洲际赛年，需要先完成C洲际赛`
+          );
+        }
+        
+        logger.info('C洲际赛已完成，允许结束奇数赛季', {
+          seasonCode,
+          clauchBracketId: clauchResult.rows[0].id,
+          clauchStatus: clauchResult.rows[0].status
+        });
+      } else {
         // 偶数赛季，检查Super洲际赛是否完成
         const superResult = await client.query(
           `SELECT sb.id, sb.status, sb.season1_code, sb.season2_code
@@ -514,7 +543,7 @@ export class SeasonService {
         if (superResult.rows[0].status !== 'completed') {
           throw new BusinessError(
             ErrorCodes.COMPETITION_NOT_ACTIVE,
-            `${seasonCode}赛季是Super杯赛年，需要先完成洲际赛`
+            `${seasonCode}赛季是Super杯赛年，需要先完成Super洲际赛`
           );
         }
         
@@ -601,8 +630,35 @@ export class SeasonService {
       
       const springCompetitionsCreated = 1; // 创建了1个春季赛competition
       
-      // 8. 初始化新赛季的积分表（regional_standings会在生成赛程时自动创建）
-      // 无需手动创建，系统会自动处理
+      // 8. 初始化新赛季的积分表
+      logger.info('开始初始化新赛季的积分表', {
+        newSeasonId,
+        newYear
+      });
+      
+      // 初始化team_statistics表
+      await client.query(
+        `INSERT INTO team_statistics (team_id, season_year, spring_points, summer_points, playoff_points, msi_points, worlds_points, intercontinental_points, total_points, last_updated)
+         SELECT id, $1, 0, 0, 0, 0, 0, 0, 0, NOW()
+         FROM teams
+         ON CONFLICT (team_id, season_year) DO NOTHING`,
+        [newYear]
+      );
+      
+      // 初始化annual_rankings表
+      await client.query(
+        `INSERT INTO annual_rankings (season_id, team_id, spring_points, summer_points, playoff_points, msi_points, worlds_points, intercontinental_points, total_points, created_at, last_updated)
+         SELECT $1, id, 0, 0, 0, 0, 0, 0, 0, NOW(), NOW()
+         FROM teams
+         ON CONFLICT (season_id, team_id) DO NOTHING`,
+        [newSeasonId]
+      );
+      
+      logger.info('积分表初始化完成', {
+        newSeasonId,
+        newYear,
+        totalTeams: 40
+      });
       
       await client.query('COMMIT');
       

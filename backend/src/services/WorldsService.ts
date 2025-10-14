@@ -148,20 +148,34 @@ export class WorldsService {
    */
   async checkWorldsEligibility(seasonId: string): Promise<WorldsEligibilityResponse> {
     try {
-      // 1. 检查赛季是否存在
-      const seasonQuery = `SELECT * FROM seasons WHERE season_code = $1`;
-      const seasonResult = await db.query(seasonQuery, [seasonId]);
-
-      if (seasonResult.rows.length === 0) {
-        return {
-          eligible: false,
-          reason: '赛季不存在'
-        };
+      // 1. 检查赛季是否存在（支持season_code或id）
+      let actualSeasonId: number;
+      let seasonCode: string;
+      
+      const isNumeric = /^\d+$/.test(seasonId);
+      if (isNumeric) {
+        // 传入的是ID
+        const seasonQuery = `SELECT id, season_code FROM seasons WHERE id = $1`;
+        const seasonResult = await db.query(seasonQuery, [seasonId]);
+        if (seasonResult.rows.length === 0) {
+          return { eligible: false, reason: '赛季不存在' };
+        }
+        actualSeasonId = seasonResult.rows[0].id;
+        seasonCode = seasonResult.rows[0].season_code;
+      } else {
+        // 传入的是season_code
+        const seasonQuery = `SELECT id, season_code FROM seasons WHERE season_code = $1`;
+        const seasonResult = await db.query(seasonQuery, [seasonId]);
+        if (seasonResult.rows.length === 0) {
+          return { eligible: false, reason: '赛季不存在' };
+        }
+        actualSeasonId = seasonResult.rows[0].id;
+        seasonCode = seasonResult.rows[0].season_code;
       }
 
-      // 2. 检查是否已有世界赛
+      // 2. 检查是否已有世界赛（使用实际的season id）
       const existingWorldsQuery = `SELECT id FROM worlds_brackets WHERE season_id = $1`;
-      const existingResult = await db.query(existingWorldsQuery, [seasonId]);
+      const existingResult = await db.query(existingWorldsQuery, [actualSeasonId]);
 
       if (existingResult.rows.length > 0) {
         return {
@@ -188,7 +202,7 @@ export class WorldsService {
       const groupStageTeams: WorldsQualification[] = []; // 亚军+季军打小组赛
 
       for (const region of regions) {
-        // 获取该赛区当前赛季的夏季赛季后赛
+        // 获取该赛区当前赛季的夏季赛季后赛（使用实际的season id）
         const playoffQuery = `
           SELECT pb.*, pb.status as bracket_status
           FROM playoff_brackets pb
@@ -199,7 +213,7 @@ export class WorldsService {
           LIMIT 1
         `;
 
-        const playoffResult = await db.query(playoffQuery, [seasonId, region.id]);
+        const playoffResult = await db.query(playoffQuery, [actualSeasonId, region.id]);
 
         if (playoffResult.rows.length === 0) {
           return {

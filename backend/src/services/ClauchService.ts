@@ -1774,21 +1774,141 @@ export class ClauchService {
         );
       }
 
-      // 分配东西半区决赛败者积分（已在更新排名时记录）
-      // 分配东西半区半决赛败者积分
-      // 分配东西半区第一轮败者积分
+      // 分配东西半区决赛败者积分（5-6名）
+      // 注意：honor_records表只记录前4名，第5名及以后只记录到score_records
+      const eastFinalQuery = `
+        SELECT team_a_id, team_b_id, winner_id 
+        FROM clauch_matches 
+        WHERE clauch_bracket_id = $1 AND knockout_round = 'east_final' AND status = 'completed'
+      `;
+      const eastFinalResult = await client.query(eastFinalQuery, [bracketId]);
+      if (eastFinalResult.rows.length > 0) {
+        const eastFinal = eastFinalResult.rows[0];
+        const eastFinalLoserId = eastFinal.winner_id === eastFinal.team_a_id ? eastFinal.team_b_id : eastFinal.team_a_id;
+        
+        // 只插入score_records，不插入honor_records
+        await client.query(
+          `INSERT INTO score_records (team_id, competition_id, points, point_type, season_year, earned_at, description)
+           VALUES ($1, $2, $3, 'intercontinental', $4, NOW(), 'C洲际赛第5名')`,
+          [eastFinalLoserId, competitionId, pointsDistribution.eastFinalLoser, seasonYear]
+        );
+      }
+      
+      const westFinalQuery = `
+        SELECT team_a_id, team_b_id, winner_id 
+        FROM clauch_matches 
+        WHERE clauch_bracket_id = $1 AND knockout_round = 'west_final' AND status = 'completed'
+      `;
+      const westFinalResult = await client.query(westFinalQuery, [bracketId]);
+      if (westFinalResult.rows.length > 0) {
+        const westFinal = westFinalResult.rows[0];
+        const westFinalLoserId = westFinal.winner_id === westFinal.team_a_id ? westFinal.team_b_id : westFinal.team_a_id;
+        
+        // 只插入score_records，不插入honor_records
+        await client.query(
+          `INSERT INTO score_records (team_id, competition_id, points, point_type, season_year, earned_at, description)
+           VALUES ($1, $2, $3, 'intercontinental', $4, NOW(), 'C洲际赛第6名')`,
+          [westFinalLoserId, competitionId, pointsDistribution.westFinalLoser, seasonYear]
+        );
+      }
 
-      logger.info('Clauch积分分配完成', { bracketId });
+      // 分配东西半区半决赛败者积分（7-10名）
+      // 只插入score_records，不插入honor_records
+      const eastSemiQuery = `
+        SELECT team_a_id, team_b_id, winner_id 
+        FROM clauch_matches 
+        WHERE clauch_bracket_id = $1 AND knockout_round = 'east_semi' AND status = 'completed'
+        ORDER BY id
+      `;
+      const eastSemiResult = await client.query(eastSemiQuery, [bracketId]);
+      let position = 7;
+      for (const match of eastSemiResult.rows) {
+        const loserId = match.winner_id === match.team_a_id ? match.team_b_id : match.team_a_id;
+        
+        await client.query(
+          `INSERT INTO score_records (team_id, competition_id, points, point_type, season_year, earned_at, description)
+           VALUES ($1, $2, $3, 'intercontinental', $4, NOW(), $5)`,
+          [loserId, competitionId, pointsDistribution.eastSemiLoser, seasonYear, `C洲际赛第${position}名`]
+        );
+        position++;
+      }
+      
+      const westSemiQuery = `
+        SELECT team_a_id, team_b_id, winner_id 
+        FROM clauch_matches 
+        WHERE clauch_bracket_id = $1 AND knockout_round = 'west_semi' AND status = 'completed'
+        ORDER BY id
+      `;
+      const westSemiResult = await client.query(westSemiQuery, [bracketId]);
+      for (const match of westSemiResult.rows) {
+        const loserId = match.winner_id === match.team_a_id ? match.team_b_id : match.team_a_id;
+        
+        await client.query(
+          `INSERT INTO score_records (team_id, competition_id, points, point_type, season_year, earned_at, description)
+           VALUES ($1, $2, $3, 'intercontinental', $4, NOW(), $5)`,
+          [loserId, competitionId, pointsDistribution.westSemiLoser, seasonYear, `C洲际赛第${position}名`]
+        );
+        position++;
+      }
+
+      // 分配东西半区第一轮败者积分（11-18名）
+      // 只插入score_records，不插入honor_records
+      const eastRound1Query = `
+        SELECT team_a_id, team_b_id, winner_id 
+        FROM clauch_matches 
+        WHERE clauch_bracket_id = $1 AND knockout_round = 'east_round1' AND status = 'completed'
+        ORDER BY id
+      `;
+      const eastRound1Result = await client.query(eastRound1Query, [bracketId]);
+      position = 11;
+      for (const match of eastRound1Result.rows) {
+        const loserId = match.winner_id === match.team_a_id ? match.team_b_id : match.team_a_id;
+        
+        await client.query(
+          `INSERT INTO score_records (team_id, competition_id, points, point_type, season_year, earned_at, description)
+           VALUES ($1, $2, $3, 'intercontinental', $4, NOW(), $5)`,
+          [loserId, competitionId, pointsDistribution.eastRound1Loser, seasonYear, `C洲际赛第${position}名`]
+        );
+        position++;
+      }
+      
+      const westRound1Query = `
+        SELECT team_a_id, team_b_id, winner_id 
+        FROM clauch_matches 
+        WHERE clauch_bracket_id = $1 AND knockout_round = 'west_round1' AND status = 'completed'
+        ORDER BY id
+      `;
+      const westRound1Result = await client.query(westRound1Query, [bracketId]);
+      for (const match of westRound1Result.rows) {
+        const loserId = match.winner_id === match.team_a_id ? match.team_b_id : match.team_a_id;
+        
+        await client.query(
+          `INSERT INTO score_records (team_id, competition_id, points, point_type, season_year, earned_at, description)
+           VALUES ($1, $2, $3, 'intercontinental', $4, NOW(), $5)`,
+          [loserId, competitionId, pointsDistribution.westRound1Loser, seasonYear, `C洲际赛第${position}名`]
+        );
+        position++;
+      }
+
+      logger.info('Clauch积分分配完成（包含所有排名）', { bracketId });
       
       // 更新team_statistics表的洲际赛积分
+      // 从score_records中获取本次C洲际赛的所有积分记录
       logger.info('开始更新team_statistics表', { seasonYear });
-      await this.updateTeamStatistics(client, seasonYear, [
-        { teamId: bracket.champion_id, points: pointsDistribution.champion },
-        { teamId: bracket.runner_up_id, points: pointsDistribution.runnerUp },
-        { teamId: bracket.third_place_id, points: pointsDistribution.thirdPlace },
-        { teamId: bracket.fourth_place_id, points: pointsDistribution.fourthPlace }
-      ]);
-      logger.info('team_statistics表更新完成');
+      const scoreRecordsQuery = `
+        SELECT team_id, SUM(points) as total_points
+        FROM score_records
+        WHERE competition_id = $1 AND point_type = 'intercontinental'
+        GROUP BY team_id
+      `;
+      const scoreRecordsResult = await client.query(scoreRecordsQuery, [competitionId]);
+      const teamPointsList = scoreRecordsResult.rows.map(row => ({
+        teamId: row.team_id,
+        points: parseInt(row.total_points)
+      }));
+      
+      await this.updateTeamStatistics(client, seasonYear, teamPointsList);
+      logger.info('team_statistics表更新完成', { teamsUpdated: teamPointsList.length });
       
       // 更新年度积分排名
       logger.info('开始更新年度积分排名', { seasonId: bracket.season_id });
