@@ -5,6 +5,7 @@
 import { PoolClient } from 'pg';
 import { db } from '@/config/database';
 import { logger } from '@/utils/logger';
+import { honorHallService } from './HonorHallService';
 import {
   MSIBracket,
   MSIMatch,
@@ -1075,25 +1076,131 @@ export class MSIService {
 
   /**
    * 分配MSI积分
+   * 根据策划案规则：冠军20分、亚军16分、季军12分、殿军8分、败者组第二轮6分、败者组第一轮4分
    */
   private async distributeMSIPoints(client: PoolClient, bracketId: string, standings: any): Promise<void> {
-    const bracketQuery = `SELECT points_distribution FROM msi_brackets WHERE id = $1`;
-    const bracketResult = await client.query(bracketQuery, [bracketId]);
-    const pointsDistribution = bracketResult.rows[0].points_distribution;
+    try {
+      // 1. 获取积分配置和赛季信息
+      const bracketQuery = `
+        SELECT 
+          mb.points_distribution,
+          mb.season_id,
+          s.year as season_year
+        FROM msi_brackets mb
+        JOIN seasons s ON mb.season_id = s.id
+        WHERE mb.id = $1
+      `;
+      const bracketResult = await client.query(bracketQuery, [bracketId]);
+      const bracketData = bracketResult.rows[0];
+      const pointsDistribution = bracketData.points_distribution;
+      const seasonYear = bracketData.season_year;
+      const pointType = 'msi';
 
-    // 分配积分
-    const distributions = [
-      { teamId: standings.champion.teamId, points: pointsDistribution.champion },
-      { teamId: standings.runnerUp.teamId, points: pointsDistribution.runnerUp },
-      { teamId: standings.thirdPlace.teamId, points: pointsDistribution.thirdPlace },
-      { teamId: standings.fourthPlace.teamId, points: pointsDistribution.fourthPlace },
-      ...standings.loserRound2.map((t: any) => ({ teamId: t.teamId, points: pointsDistribution.loserRound2 })),
-      ...standings.loserRound1.map((t: any) => ({ teamId: t.teamId, points: pointsDistribution.loserRound1 }))
-    ];
+      // 2. 分配前四名积分
+      const distributions = [
+        { 
+          teamId: standings.champion.teamId, 
+          points: pointsDistribution.champion || 20,
+          rank: 1,
+          description: 'MSI冠军'
+        },
+        { 
+          teamId: standings.runnerUp.teamId, 
+          points: pointsDistribution.runnerUp || 16,
+          rank: 2,
+          description: 'MSI亚军'
+        },
+        { 
+          teamId: standings.thirdPlace.teamId, 
+          points: pointsDistribution.thirdPlace || 12,
+          rank: 3,
+          description: 'MSI季军'
+        },
+        { 
+          teamId: standings.fourthPlace.teamId, 
+          points: pointsDistribution.fourthPlace || 8,
+          rank: 4,
+          description: 'MSI殿军'
+        }
+      ];
 
-    for (const dist of distributions) {
-      // TODO: 实际项目中应该调用积分服务更新年度积分
-      logger.info('[MSI] 分配MSI积分', { teamId: dist.teamId, points: dist.points });
+      // 3. 添加败者组第二轮淘汰队伍（2队，各6分）
+      const loserRound2Points = pointsDistribution.loserRound2 || 6;
+      standings.loserRound2.forEach((team: any, index: number) => {
+        distributions.push({
+          teamId: team.teamId,
+          points: loserRound2Points,
+          rank: 5 + index,
+          description: 'MSI败者组第二轮'
+        });
+      });
+
+      // 4. 添加败者组第一轮淘汰队伍（2队，各4分）
+      const loserRound1Points = pointsDistribution.loserRound1 || 4;
+      standings.loserRound1.forEach((team: any, index: number) => {
+        distributions.push({
+          teamId: team.teamId,
+          points: loserRound1Points,
+          rank: 7 + index,
+          description: 'MSI败者组第一轮'
+        });
+      });
+
+      // 5. 使用数据库函数分配积分
+      for (const dist of distributions) {
+        await client.query(`
+          SELECT award_points_to_team($1, $2, $3, $4, NULL, NULL, $5)
+        `, [
+          dist.teamId,
+          seasonYear,
+          dist.points,
+          pointType,
+          `${dist.description} (+${dist.points}分)`
+        ]);
+
+        logger.info('✅ MSI积分已分配', {
+          teamId: dist.teamId,
+          points: dist.points,
+          rank: dist.rank,
+          description: dist.description,
+          seasonYear
+        });
+      }
+
+      // 6. 创建荣誉记录（只为前4名创建）
+      const honorQuery = `
+        SELECT c.id as competition_id, c.season_id
+        FROM msi_brackets mb
+        JOIN competitions c ON mb.season_id = c.season_id AND c.type = 'msi'
+        WHERE mb.id = $1
+      `;
+      const honorResult = await client.query(honorQuery, [bracketId]);
+      const { competition_id, season_id } = honorResult.rows[0];
+      
+      for (const dist of distributions.slice(0, 4)) { // 只记录前4名
+        await honorHallService.createHonorRecord(
+          season_id.toString(),
+          competition_id.toString(),
+          dist.teamId.toString(),
+          dist.rank,
+          dist.points
+        );
+      }
+
+      logger.info('🎉 MSI积分分配和荣誉记录创建完成', {
+        bracketId,
+        seasonYear,
+        totalPointsAwarded: distributions.reduce((sum, d) => sum + d.points, 0),
+        teamsCount: distributions.length
+      });
+
+    } catch (error: any) {
+      logger.error('❌ MSI积分分配失败', {
+        error: error.message,
+        bracketId,
+        standings
+      });
+      throw error;
     }
   }
 

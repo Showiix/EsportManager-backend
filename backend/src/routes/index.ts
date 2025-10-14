@@ -7,7 +7,9 @@ import { rankingController } from '../controllers/RankingController';
 import { honorHallController } from '../controllers/HonorHallController';
 import { playoffController } from '../controllers/PlayoffController';
 import { msiController } from '../controllers/MSIController';
+import { worldsController } from '../controllers/WorldsController';
 import { seasonController } from '../controllers/SeasonController';
+import pointsRouter from './points';
 
 const router = Router();
 
@@ -71,6 +73,9 @@ router.post('/seasons/:seasonId/proceed-to-summer', seasonController.proceedToSu
 
 // 获取赛季进度
 router.get('/seasons/:seasonId/progress', seasonController.getSeasonProgress.bind(seasonController));
+
+// 结束赛季并创建新赛季
+router.post('/seasons/:seasonId/end', seasonController.endSeason.bind(seasonController));
 
 // =================================================================
 // 赛事管理路由
@@ -164,6 +169,13 @@ router.post('/rankings/annual/update', rankingController.updateAnnualRankings.bi
 router.post('/rankings/refresh', rankingController.refreshAllRankings.bind(rankingController));
 
 // =================================================================
+// 积分管理路由
+// =================================================================
+
+// 使用独立的积分路由模块
+router.use('/points', pointsRouter);
+
+// =================================================================
 // 荣誉殿堂路由
 // =================================================================
 
@@ -224,6 +236,40 @@ router.get('/msi/check-eligibility', msiController.checkMSIEligibility.bind(msiC
 router.get('/msi/historical', msiController.getHistoricalMSI.bind(msiController));
 
 // =================================================================
+// 世界赛路由
+// =================================================================
+
+// 生成世界赛对阵(夏季赛季后赛全部结束后调用)
+router.post('/worlds/generate', worldsController.generateWorlds.bind(worldsController));
+
+// 获取世界赛对阵信息
+router.get('/worlds/bracket', worldsController.getWorldsBracket.bind(worldsController));
+
+// 模拟世界赛单场比赛(瑞士轮BO3或淘汰赛BO5)
+router.post('/worlds/simulate-match', worldsController.simulateWorldsMatch.bind(worldsController));
+
+// 获取世界赛资格队伍(各赛区夏季赛前三名)
+router.get('/worlds/qualified-teams', worldsController.getQualifiedTeams.bind(worldsController));
+
+// 检查是否可以生成世界赛(所有赛区夏季赛季后赛是否结束)
+router.get('/worlds/check-eligibility', worldsController.checkWorldsEligibility.bind(worldsController));
+
+// 获取瑞士轮积分榜
+router.get('/worlds/:id/swiss-standings', worldsController.getSwissStandings.bind(worldsController));
+
+// 更新世界赛状态
+router.put('/worlds/:id/status', worldsController.updateWorldsStatus.bind(worldsController));
+
+// 生成瑞士轮下一轮对阵
+router.post('/worlds/:id/generate-swiss-round', worldsController.generateSwissRound.bind(worldsController));
+
+// 生成淘汰赛对阵
+router.post('/worlds/:id/generate-knockout', worldsController.generateKnockout.bind(worldsController));
+
+// 获取历史世界赛数据
+router.get('/worlds/historical', worldsController.getHistoricalWorlds.bind(worldsController));
+
+// =================================================================
 // API信息路由
 // =================================================================
 
@@ -238,9 +284,11 @@ router.get('/', (req, res) => {
       competitions: '/api/competitions',
       matches: '/api/matches',
       rankings: '/api/rankings',
+      points: '/api/points',
       honorHall: '/api/honor-hall',
       playoffs: '/api/playoffs',
       msi: '/api/msi',
+      worlds: '/api/worlds',
       health: '/api/health'
     },
     documentation: 'Coming Soon'

@@ -490,15 +490,11 @@ export class SeasonService {
         );
       }
       
-      // 3. 检查是否是super年（偶数赛季）
-      // S2, S4, S6... 是super年，需要先完成洲际赛
-      const seasonCode = currentSeason.season_code; // 如 "S1", "S2"
-      const seasonNumber = parseInt(seasonCode.substring(1)); // S1 → 1, S2 → 2
-      
-      if (seasonNumber % 2 === 0) {
+      // 3. 检查是否是super年（偶数年）
+      if (currentYear % 2 === 0) {
         throw new BusinessError(
           ErrorCodes.COMPETITION_NOT_ACTIVE,
-          `${seasonCode}赛季是Super杯赛年，需要先完成洲际赛`
+          `${currentYear}年是Super杯赛年，需要先完成洲际赛`
         );
       }
       
@@ -513,10 +509,10 @@ export class SeasonService {
       const newSeasonCode = `S${newYear - 2023}`; // S1=2024, S2=2025...
       
       const newSeasonResult = await client.query(
-        `INSERT INTO seasons (year, season_code, name, display_name, status, current_phase, start_date, end_date)
-         VALUES ($1, $2, $3, $4, 'active', 'spring', NOW(), NOW() + INTERVAL '1 year')
+        `INSERT INTO seasons (year, season_code, name, status, current_stage, start_date, end_date)
+         VALUES ($1, $2, $3, 'active', 'spring', NOW(), NOW() + INTERVAL '1 year')
          RETURNING id`,
-        [newYear, newSeasonCode, `${newSeasonCode}赛季`, `${newYear}赛季`]
+        [newYear, newSeasonCode, `${newYear}赛季`]
       );
       
       const newSeasonId = newSeasonResult.rows[0].id;
@@ -533,50 +529,55 @@ export class SeasonService {
       );
       const regions = regionsResult.rows;
       
-      // 7. 创建新赛季的春季赛（一个competition包含所有队伍）
-      const springCompetitionResult = await client.query(
-        `INSERT INTO competitions (season_id, name, type, status, format, scoring_rules, max_teams, start_date, end_date)
-         VALUES ($1, $2, 'spring', 'planning', $3, $4, 40, NOW(), NOW() + INTERVAL '3 months')
-         RETURNING id`,
-        [
-          newSeasonId,
-          `${newSeasonCode} 春季赛`,
-          JSON.stringify({
-            type: 'league',
-            regularSeason: {
-              format: 'round-robin',
-              matchFormat: 'BO3'
-            }
-          }),
-          JSON.stringify({
-            regular: {
-              '2-0': 3,
-              '2-1': 2,
-              '1-2': 1,
-              '0-2': 0
-            }
-          })
-        ]
-      );
+      // 7. 为每个赛区创建春季赛
+      let springCompetitionsCreated = 0;
       
-      const springCompetitionId = springCompetitionResult.rows[0].id;
-      
-      // 添加所有队伍到春季赛
-      await client.query(
-        `INSERT INTO competition_teams (competition_id, team_id, joined_at)
-         SELECT $1, id, NOW()
-         FROM teams
-         ORDER BY region_id, id`,
-        [springCompetitionId]
-      );
-      
-      logger.info('春季赛创建成功', {
-        competitionId: springCompetitionId,
-        seasonCode: newSeasonCode,
-        totalTeams: 40
-      });
-      
-      const springCompetitionsCreated = 1; // 创建了1个春季赛competition
+      for (const region of regions) {
+        // 创建春季赛
+        const competitionResult = await client.query(
+          `INSERT INTO competitions (season_id, name, type, status, format, scoring_rules, max_teams, start_date, end_date)
+           VALUES ($1, $2, 'spring', 'pending', $3, $4, 10, NOW(), NOW() + INTERVAL '3 months')
+           RETURNING id`,
+          [
+            newSeasonId,
+            `${region.name} ${newYear} 春季赛`,
+            JSON.stringify({
+              type: 'league',
+              regularSeason: {
+                format: 'round-robin',
+                matchFormat: 'BO3'
+              }
+            }),
+            JSON.stringify({
+              regular: {
+                '2-0': 3,
+                '2-1': 2,
+                '1-2': 1,
+                '0-2': 0
+              }
+            })
+          ]
+        );
+        
+        const competitionId = competitionResult.rows[0].id;
+        
+        // 添加该赛区的所有队伍到春季赛
+        await client.query(
+          `INSERT INTO competition_teams (competition_id, team_id, created_at)
+           SELECT $1, t.id, NOW()
+           FROM teams t
+           WHERE t.region_id = $2`,
+          [competitionId, region.id]
+        );
+        
+        springCompetitionsCreated++;
+        
+        logger.info('赛区春季赛创建成功', {
+          regionId: region.id,
+          regionName: region.name,
+          competitionId
+        });
+      }
       
       // 8. 初始化新赛季的积分表（regional_standings会在生成赛程时自动创建）
       // 无需手动创建，系统会自动处理

@@ -221,7 +221,7 @@ export class HonorHallService {
       // 春季赛荣誉
       const springHonor = await this.calculateRegionSeasonHonor(
         seasonId,
-        region.id.toString(),
+        region.id,
         region.name,
         'spring'
       );
@@ -232,7 +232,7 @@ export class HonorHallService {
       // 夏季赛荣誉
       const summerHonor = await this.calculateRegionSeasonHonor(
         seasonId,
-        region.id.toString(),
+        region.id,
         region.name,
         'summer'
       );
@@ -249,17 +249,16 @@ export class HonorHallService {
    */
   private async calculateRegionSeasonHonor(
     seasonId: string,
-    regionId: string,
+    regionId: number,
     regionName: string,
     type: 'spring' | 'summer'
   ): Promise<RegionalHonor | null> {
-    // 查找该赛区该赛季的季后赛赛事
+    // 查找该赛区该赛季的赛事（春季赛或夏季赛）
     const competitionQuery = `
       SELECT c.id, c.name
       FROM competitions c
       WHERE c.season_id = $1
         AND c.type = $2
-        AND c.format->>'type' = 'playoffs'
         AND c.status = 'completed'
       LIMIT 1
     `;
@@ -302,7 +301,7 @@ export class HonorHallService {
     const thirdPlace = honorsResult.rows.find((r: any) => r.position === 3);
 
     return {
-      regionId,
+      regionId: regionId.toString(),
       regionName,
       competitionType: type,
       champion: champion ? this.mapToTeamAchievement(champion) : null,

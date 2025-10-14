@@ -6,6 +6,7 @@ import { MatchRepository } from '../repositories/MatchRepository';
 import { TeamRepository } from '../repositories/TeamRepository';
 import { CompetitionRepository } from '../repositories/CompetitionRepository';
 import { rankingService } from './RankingService';
+import { matchService } from './MatchService';
 import {
   Match,
   Team,
@@ -229,8 +230,8 @@ export class ScheduleService {
             winner: simulationResult.winnerId
           });
 
-          // 更新比赛结果
-          await this.matchRepository.updateResult(match.id, {
+          // 更新比赛结果（使用MatchService以正确清除缓存）
+          await matchService.updateMatchResult(match.id, {
             scoreA: simulationResult.homeScore,
             scoreB: simulationResult.awayScore,
             winnerId: simulationResult.winnerId,
@@ -341,12 +342,26 @@ export class ScheduleService {
     winnerId: string;
     details: GameDetail[];
   } {
+    // 修复：数据库返回的字段名是 power_rating，需要兼容处理
+    const homePowerRating = (homeTeam as any).power_rating || homeTeam.powerRating || 50;
+    const awayPowerRating = (awayTeam as any).power_rating || awayTeam.powerRating || 50;
+
     // 计算调整后的实力值（考虑主场优势）
-    const homePower = homeTeam.powerRating + this.HOME_ADVANTAGE;
-    const awayPower = awayTeam.powerRating;
+    const homePower = homePowerRating + this.HOME_ADVANTAGE;
+    const awayPower = awayPowerRating;
 
     // 计算战力差距
     const powerDiff = homePower - awayPower;
+
+    logger.debug('Match power calculation', {
+      homeTeam: homeTeam.name,
+      awayTeam: awayTeam.name,
+      homePowerRating,
+      awayPowerRating,
+      homePower,
+      awayPower,
+      powerDiff
+    });
 
     // 使用逻辑函数计算基础胜率
     // winRate = 1 / (1 + exp(-powerDiff / K))

@@ -85,10 +85,19 @@ export class MatchService {
     try {
       const cached = await redisService.get(cacheKey);
       if (cached) {
+        logger.debug('Returning cached matches', { competitionId, phase, count: JSON.parse(cached).length });
         return JSON.parse(cached);
       }
 
       const matches = await this.matchRepository.findByCompetition(competitionId, phase);
+      
+      logger.info('Fetched matches from database', {
+        competitionId,
+        phase,
+        totalMatches: matches.length,
+        completedMatches: matches.filter(m => m.status === 'completed').length,
+        scheduledMatches: matches.filter(m => m.status === 'scheduled').length
+      });
 
       // 缓存结果（10分钟）
       await redisService.set(cacheKey, JSON.stringify(matches), 600);
@@ -233,20 +242,29 @@ export class MatchService {
       }
 
       // 清除相关缓存
-      await this.invalidateCache([
+      const cachePatterns = [
         `${this.cachePrefix}:${id}:*`,
         `${this.cachePrefix}:competition:${match.competitionId}:*`,
         `${this.cachePrefix}:team:${match.teamAId}:*`,
         `${this.cachePrefix}:team:${match.teamBId}:*`,
         `${this.cachePrefix}:completed:*`,
         `${this.cachePrefix}:upcoming:*`
-      ]);
+      ];
+      
+      logger.info('Invalidating cache for match update', {
+        matchId: id,
+        competitionId: match.competitionId,
+        cachePatterns
+      });
+      
+      await this.invalidateCache(cachePatterns);
 
       logger.info('Match result updated successfully', {
         matchId: id,
         scoreA: resultData.scoreA,
         scoreB: resultData.scoreB,
-        winnerId: resultData.winnerId
+        winnerId: resultData.winnerId,
+        status: updatedMatch.status
       });
 
       return updatedMatch;
@@ -409,9 +427,22 @@ export class MatchService {
     winnerId: string;
   } {
     // 基于战力值的概率计算
-    const powerDiff = teamA.powerRating - teamB.powerRating;
+    // 修复：数据库返回的字段名是 power_rating，不是 powerRating
+    const powerA = (teamA as any).power_rating ?? teamA.powerRating ?? 50;
+    const powerB = (teamB as any).power_rating ?? teamB.powerRating ?? 50;
+    const powerDiff = powerA - powerB;
     const baseWinProbA = 0.5 + (powerDiff / 200); // 战力差值转换为胜率
     const winProbA = Math.max(0.1, Math.min(0.9, baseWinProbA)); // 限制在10%-90%之间
+
+    logger.info('🎮 Match simulation:', {
+      teamA: teamA.name,
+      teamB: teamB.name,
+      powerA,
+      powerB,
+      powerDiff,
+      winProbA: (winProbA * 100).toFixed(1) + '%',
+      format
+    });
 
     // 根据赛制确定获胜所需局数
     const maxGames = format === 'BO5' ? 5 : format === 'BO3' ? 3 : 1;

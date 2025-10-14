@@ -175,6 +175,35 @@ export class SeasonController {
       next(error);
     }
   }
+
+  /**
+   * 结束当前赛季并创建新赛季
+   * POST /api/seasons/:seasonId/end
+   */
+  async endSeason(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { seasonId } = req.params;
+
+      logger.info('收到结束赛季请求', { seasonId });
+
+      const result = await seasonService.endSeasonAndCreateNew(seasonId);
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: result,
+        meta: {
+          timestamp: new Date().toISOString(),
+          requestId: req.headers['x-request-id'] as string || 'unknown'
+        }
+      };
+
+      logger.info('赛季结束成功', { result });
+      res.json(response);
+    } catch (error) {
+      logger.error('结束赛季失败', { error });
+      next(error);
+    }
+  }
 }
 
 export const seasonController = new SeasonController();

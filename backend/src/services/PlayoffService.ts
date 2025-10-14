@@ -6,6 +6,7 @@ import { PoolClient } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/config/database';
 import { logger } from '@/utils/logger';
+import { honorHallService } from './HonorHallService';
 import {
   PlayoffBracket,
   PlayoffMatch,
@@ -942,23 +943,116 @@ export class PlayoffService {
 
   /**
    * 分配季后赛积分
+   * 根据策划案规则：冠军12分、亚军10分、季军8分、第4名6分
    */
   private async distributePlayoffPoints(client: any, bracketId: string, standings: any): Promise<void> {
-    const bracketQuery = `SELECT points_distribution FROM playoff_brackets WHERE id = $1`;
-    const bracketResult = await client.query(bracketQuery, [bracketId]);
-    const pointsDistribution = bracketResult.rows[0].points_distribution;
+    try {
+      // 1. 获取积分配置和赛季信息
+      const bracketQuery = `
+        SELECT 
+          pb.points_distribution, 
+          pb.competition_id,
+          pb.region_id,
+          c.season_id,
+          c.type as competition_type,
+          s.year as season_year
+        FROM playoff_brackets pb
+        JOIN competitions c ON pb.competition_id = c.id
+        JOIN seasons s ON c.season_id = s.id
+        WHERE pb.id = $1
+      `;
+      const bracketResult = await client.query(bracketQuery, [bracketId]);
+      const bracketData = bracketResult.rows[0];
+      const pointsDistribution = bracketData.points_distribution;
+      const competitionId = bracketData.competition_id;
+      const seasonYear = bracketData.season_year;
+      const competitionType = bracketData.competition_type; // 'spring' or 'summer'
 
-    // 分配积分
-    const distributions = [
-      { teamId: standings.champion.teamId, points: pointsDistribution.champion },
-      { teamId: standings.runnerUp.teamId, points: pointsDistribution.runnerUp },
-      { teamId: standings.thirdPlace.teamId, points: pointsDistribution.thirdPlace },
-      { teamId: standings.fourthPlace.teamId, points: pointsDistribution.fourthPlace }
-    ];
+      // 2. 确定积分类型
+      const pointType = competitionType === 'spring' ? 'spring_playoff' : 'summer_playoff';
 
-    for (const dist of distributions) {
-      // TODO: 实际项目中应该调用积分服务更新年度积分
-      logger.info('分配季后赛积分', { teamId: dist.teamId, points: dist.points });
+      // 3. 分配前四名积分
+      const distributions = [
+        { 
+          teamId: standings.champion.teamId, 
+          points: pointsDistribution.champion || 12,
+          rank: 1,
+          description: '季后赛冠军'
+        },
+        { 
+          teamId: standings.runnerUp.teamId, 
+          points: pointsDistribution.runnerUp || 10,
+          rank: 2,
+          description: '季后赛亚军'
+        },
+        { 
+          teamId: standings.thirdPlace.teamId, 
+          points: pointsDistribution.thirdPlace || 8,
+          rank: 3,
+          description: '季后赛季军'
+        },
+        { 
+          teamId: standings.fourthPlace.teamId, 
+          points: pointsDistribution.fourthPlace || 6,
+          rank: 4,
+          description: '季后赛第四名'
+        }
+      ];
+
+      // 4. 使用数据库函数分配积分
+      for (const dist of distributions) {
+        await client.query(`
+          SELECT award_points_to_team($1, $2, $3, $4, $5, NULL, $6)
+        `, [
+          dist.teamId,
+          seasonYear,
+          dist.points,
+          pointType,
+          competitionId,
+          `${dist.description} (+${dist.points}分)`
+        ]);
+
+        logger.info('✅ 季后赛积分已分配', {
+          teamId: dist.teamId,
+          points: dist.points,
+          rank: dist.rank,
+          description: dist.description,
+          seasonYear,
+          competitionType
+        });
+      }
+
+      // 5. TODO: 处理第5-6名积分（常规赛前6但未进季后赛前4的队伍各得3分）
+      // 这部分需要在常规赛结束时处理
+
+      // 6. 创建荣誉记录
+      const seasonId = bracketData.season_id.toString();
+      const competitionIdStr = competitionId.toString();
+      
+      for (const dist of distributions) {
+        await honorHallService.createHonorRecord(
+          seasonId,
+          competitionIdStr,
+          dist.teamId.toString(),
+          dist.rank,
+          dist.points
+        );
+      }
+
+      logger.info('🎉 季后赛积分分配和荣誉记录创建完成', {
+        bracketId,
+        seasonYear,
+        competitionType,
+        totalPointsAwarded: distributions.reduce((sum, d) => sum + d.points, 0)
+      });
+
+    } catch (error: any) {
+      logger.error('❌ 季后赛积分分配失败', {
+        error: error.message,
+        bracketId,
+        standings
+      });
+      throw error;
     }
   }
 
