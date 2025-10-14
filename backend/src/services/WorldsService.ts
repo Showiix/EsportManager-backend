@@ -329,12 +329,65 @@ export class WorldsService {
 
       const { qualifiedTeams, directSeeds, groupStageTeams } = eligibility;
 
-      // 2. 获取赛季年份
-      const seasonQuery = `SELECT year FROM seasons WHERE season_code = $1`;
-      const seasonResult = await client.query(seasonQuery, [request.seasonId]);
-      const seasonYear = seasonResult.rows[0]?.year || new Date().getFullYear();
+      // 2. 获取赛季信息
+      // 判断传入的是season_code还是id
+      let actualSeasonId: string;
+      let seasonYear: number;
+      let seasonCode: string;
+      
+      const isNumeric = /^\d+$/.test(request.seasonId);
+      if (isNumeric) {
+        // 传入的是ID
+        const seasonQuery = `SELECT id, year, season_code FROM seasons WHERE id = $1`;
+        const seasonResult = await client.query(seasonQuery, [request.seasonId]);
+        if (seasonResult.rows.length === 0) {
+          throw new BusinessError(ErrorCodes.TEAM_NOT_FOUND, `赛季ID ${request.seasonId} 不存在`);
+        }
+        actualSeasonId = seasonResult.rows[0].id;
+        seasonYear = seasonResult.rows[0].year;
+        seasonCode = seasonResult.rows[0].season_code;
+      } else {
+        // 传入的是season_code
+        const seasonQuery = `SELECT id, year, season_code FROM seasons WHERE season_code = $1`;
+        const seasonResult = await client.query(seasonQuery, [request.seasonId]);
+        if (seasonResult.rows.length === 0) {
+          throw new BusinessError(ErrorCodes.TEAM_NOT_FOUND, `赛季代码 ${request.seasonId} 不存在`);
+        }
+        actualSeasonId = seasonResult.rows[0].id;
+        seasonYear = seasonResult.rows[0].year;
+        seasonCode = seasonResult.rows[0].season_code;
+      }
 
-      // 3. 创建世界赛对阵表
+      logger.info('[Worlds] 赛季信息', {
+        requestSeasonId: request.seasonId,
+        actualSeasonId,
+        seasonCode,
+        seasonYear
+      });
+
+      // 3. 创建或获取Worlds competition记录
+      const competitionQuery = `
+        INSERT INTO competitions (season_id, type, name, status, format, scoring_rules, max_teams, start_date, end_date)
+        VALUES ($1, 'worlds', $2, 'active', $3, $4, 12, NOW(), NOW() + INTERVAL '2 months')
+        ON CONFLICT (season_id, type) DO UPDATE 
+        SET status = 'active', updated_at = NOW()
+        RETURNING id
+      `;
+      const competitionResult = await client.query(competitionQuery, [
+        actualSeasonId,
+        `${seasonCode} 世界赛`,
+        JSON.stringify({ type: 'worlds', stages: ['play_in', 'swiss', 'knockout'] }),
+        JSON.stringify({})
+      ]);
+      const competitionId = competitionResult.rows[0].id;
+      
+      logger.info('[Worlds] competition创建或更新成功', {
+        seasonId: actualSeasonId,
+        seasonCode,
+        competitionId
+      });
+
+      // 4. 创建世界赛对阵表
       const insertBracketQuery = `
         INSERT INTO worlds_brackets (
           season_id, season_year, status,
@@ -353,7 +406,7 @@ export class WorldsService {
       };
 
       const bracketResult = await client.query(insertBracketQuery, [
-        request.seasonId,
+        seasonCode, // 存储season_code而不是数据库ID
         seasonYear,
         'play_in_draw', // 初始状态：入围赛抽签
         JSON.stringify(qualifiedTeams),
@@ -362,22 +415,24 @@ export class WorldsService {
 
       const bracketId = bracketResult.rows[0].id;
 
-      // 4. 初始化瑞士轮积分榜（只为小组赛8支队伍创建）
+      // 5. 初始化瑞士轮积分榜（只为小组赛8支队伍创建）
       await this.initializeSwissStandings(client, bracketId, groupStageTeams!);
 
       logger.info('[Worlds] 世界赛对阵生成成功', {
         bracketId,
-        seasonId: request.seasonId,
+        seasonId: actualSeasonId,
+        seasonCode,
+        competitionId,
         directSeeds: directSeeds!.length,
         groupStageTeams: groupStageTeams!.length
       });
 
       await client.query('COMMIT');
 
-      // 5. 返回完整的世界赛对阵
+      // 6. 返回完整的世界赛对阵
       return {
         id: bracketId,
-        seasonId: request.seasonId,
+        seasonId: seasonCode, // 返回season_code供前端使用
         seasonYear,
         status: 'play_in_draw',
         playInTeams: qualifiedTeams!,
@@ -426,7 +481,7 @@ export class WorldsService {
    */
   async getWorldsBracket(seasonId: string): Promise<WorldsBracket | null> {
     try {
-      // 1. 查询世界赛对阵基本信息
+      // 1. 查询世界赛对阵基本信息（season_id存储的是season_code）
       const bracketQuery = `
         SELECT * FROM worlds_brackets
         WHERE season_id = $1
@@ -484,7 +539,7 @@ export class WorldsService {
       // 5. 构造返回数据
       const worldsBracket: WorldsBracket = {
         id: bracket.id.toString(),
-        seasonId: bracket.season_id,
+        seasonId: bracket.season_id, // 返回season_code供前端使用
         seasonYear: bracket.season_year,
         status: bracket.status,
         currentSwissRound: currentSwissRound, // 当前瑞士轮轮次
@@ -1615,7 +1670,9 @@ export class WorldsService {
         SELECT 
           wb.points_distribution,
           wb.season_id,
-          s.year as season_year
+          s.year as season_year,
+          s.season_code,
+          s.id as db_season_id
         FROM worlds_brackets wb
         JOIN seasons s ON wb.season_id = s.season_code
         WHERE wb.id = $1
@@ -1698,27 +1755,41 @@ export class WorldsService {
       }
 
       // 6. 创建荣誉记录（只为前4名创建）
+      // 使用之前查询的db_season_id来查找competition
       const honorQuery = `
         SELECT c.id as competition_id, c.season_id
-        FROM worlds_brackets wb
-        JOIN seasons s ON s.year = wb.season_year
-        JOIN competitions c ON c.season_id = s.id AND c.type = 'worlds'
-        WHERE wb.id = $1
+        FROM competitions c
+        WHERE c.season_id = $1 AND c.type = 'worlds'
       `;
-      const honorResult = await client.query(honorQuery, [bracketId]);
-      const { competition_id, season_id } = honorResult.rows[0];
-
-      for (const dist of distributions.slice(0, 4)) { // 只记录前4名
-        await honorHallService.createHonorRecord(
-          season_id.toString(),
-          competition_id.toString(),
-          dist.teamId.toString(),
-          dist.rank,
-          dist.points
-        );
+      const honorResult = await client.query(honorQuery, [bracketData.db_season_id]);
+      
+      if (honorResult.rows.length > 0) {
+        const { competition_id, season_id } = honorResult.rows[0];
+        
+        for (const dist of distributions.slice(0, 4)) { // 只记录前4名
+          await honorHallService.createHonorRecord(
+            season_id.toString(),
+            competition_id.toString(),
+            dist.teamId.toString(),
+            dist.rank,
+            dist.points
+          );
+        }
+        
+        logger.info('✅ 世界赛荣誉记录创建完成', {
+          bracketId,
+          seasonId: season_id,
+          competitionId: competition_id
+        });
+      } else {
+        logger.warn('⚠️ 未找到对应的Worlds competition，跳过荣誉记录创建', {
+          bracketId,
+          seasonId: bracketData.season_id,
+          dbSeasonId: bracketData.db_season_id
+        });
       }
 
-      logger.info('🎉 世界赛积分分配和荣誉记录创建完成', {
+      logger.info('🎉 世界赛积分分配完成', {
         bracketId,
         seasonYear,
         totalPointsAwarded: distributions.reduce((sum, d) => sum + d.points, 0),

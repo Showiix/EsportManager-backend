@@ -203,12 +203,35 @@ export class MSIService {
 
       const { qualifiedTeams, legendaryGroup, challengerGroup, qualifierGroup } = eligibility;
 
-      // 2. 获取赛季年份
-      const seasonQuery = `SELECT year FROM seasons WHERE id = $1`;
+      // 2. 获取赛季信息
+      const seasonQuery = `SELECT year, season_code FROM seasons WHERE id = $1`;
       const seasonResult = await client.query(seasonQuery, [request.seasonId]);
       const seasonYear = seasonResult.rows[0]?.year || new Date().getFullYear();
+      const seasonCode = seasonResult.rows[0]?.season_code || 'S1';
 
-      // 3. 创建MSI对阵表
+      // 3. 创建或获取MSI competition记录
+      const competitionQuery = `
+        INSERT INTO competitions (season_id, type, name, status, format, scoring_rules, max_teams, start_date, end_date)
+        VALUES ($1, 'msi', $2, 'active', $3, $4, 12, NOW(), NOW() + INTERVAL '1 month')
+        ON CONFLICT (season_id, type) DO UPDATE 
+        SET status = 'active', updated_at = NOW()
+        RETURNING id
+      `;
+      const competitionResult = await client.query(competitionQuery, [
+        request.seasonId,
+        `${seasonCode} MSI季中赛`,
+        JSON.stringify({ type: 'double_elimination' }),
+        JSON.stringify({})
+      ]);
+      const competitionId = competitionResult.rows[0].id;
+      
+      logger.info('MSI competition创建或更新成功', {
+        seasonId: request.seasonId,
+        seasonCode,
+        competitionId
+      });
+
+      // 4. 创建MSI对阵表
       const insertBracketQuery = `
         INSERT INTO msi_brackets (
           season_id, season_year, status,
@@ -240,7 +263,7 @@ export class MSIService {
 
       const bracketId = bracketResult.rows[0].id;
 
-      // 4. 生成双败淘汰赛制的比赛
+      // 5. 生成双败淘汰赛制的比赛
       const matches = await this.generateMSIMatches(
         client,
         bracketId,
@@ -249,12 +272,12 @@ export class MSIService {
         qualifierGroup!
       );
 
-      // 5. 构建轮次信息
+      // 6. 构建轮次信息
       const rounds = this.buildMSIRounds(matches);
 
       await client.query('COMMIT');
 
-      // 6. 返回完整的MSI对阵
+      // 7. 返回完整的MSI对阵
       return {
         id: bracketId,
         seasonId: request.seasonId,
@@ -1168,6 +1191,7 @@ export class MSIService {
       }
 
       // 6. 创建荣誉记录（只为前4名创建）
+      // 注意：只有当存在对应的competition时才创建荣誉记录
       const honorQuery = `
         SELECT c.id as competition_id, c.season_id
         FROM msi_brackets mb
@@ -1175,16 +1199,30 @@ export class MSIService {
         WHERE mb.id = $1
       `;
       const honorResult = await client.query(honorQuery, [bracketId]);
-      const { competition_id, season_id } = honorResult.rows[0];
       
-      for (const dist of distributions.slice(0, 4)) { // 只记录前4名
-        await honorHallService.createHonorRecord(
-          season_id.toString(),
-          competition_id.toString(),
-          dist.teamId.toString(),
-          dist.rank,
-          dist.points
-        );
+      if (honorResult.rows.length > 0) {
+        const { competition_id, season_id } = honorResult.rows[0];
+        
+        for (const dist of distributions.slice(0, 4)) { // 只记录前4名
+          await honorHallService.createHonorRecord(
+            season_id.toString(),
+            competition_id.toString(),
+            dist.teamId.toString(),
+            dist.rank,
+            dist.points
+          );
+        }
+        
+        logger.info('✅ MSI荣誉记录创建完成', {
+          bracketId,
+          seasonId: season_id,
+          competitionId: competition_id
+        });
+      } else {
+        logger.warn('⚠️ 未找到对应的MSI competition，跳过荣誉记录创建', {
+          bracketId,
+          seasonId: bracketData.season_id
+        });
       }
 
       logger.info('🎉 MSI积分分配和荣誉记录创建完成', {

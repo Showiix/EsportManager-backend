@@ -344,8 +344,8 @@ export class PlayoffService {
       const insertBracketQuery = `
         INSERT INTO playoff_brackets (
           id, competition_id, region_id, region_name, competition_type,
-          status, qualified_teams, points_distribution
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          status, qualified_teams, points_distribution, new_season_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
       `;
 
@@ -364,7 +364,8 @@ export class PlayoffService {
         request.competitionType,
         'not_started',
         JSON.stringify(qualifiedTeams),
-        JSON.stringify(pointsDistribution)
+        JSON.stringify(pointsDistribution),
+        request.seasonId // 添加new_season_id字段
       ]);
 
       // 4. 生成双败淘汰赛制的比赛
