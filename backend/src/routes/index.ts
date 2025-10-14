@@ -8,6 +8,7 @@ import { honorHallController } from '../controllers/HonorHallController';
 import { playoffController } from '../controllers/PlayoffController';
 import { msiController } from '../controllers/MSIController';
 import { worldsController } from '../controllers/WorldsController';
+import { superController } from '../controllers/SuperController';
 import { seasonController } from '../controllers/SeasonController';
 import pointsRouter from './points';
 
@@ -270,6 +271,34 @@ router.post('/worlds/:id/generate-knockout', worldsController.generateKnockout.b
 router.get('/worlds/historical', worldsController.getHistoricalWorlds.bind(worldsController));
 
 // =================================================================
+// Super洲际超级杯路由
+// =================================================================
+
+// 生成Super对阵(两年世界赛全部结束后调用)
+router.post('/super/generate', superController.generateSuper.bind(superController));
+
+// 获取Super对阵信息
+router.get('/super/bracket', superController.getBracket.bind(superController));
+
+// 模拟Super单场比赛
+router.post('/super/simulate-match', superController.simulateMatch.bind(superController));
+
+// 获取Super资格队伍(基于两年积分总和前16名)
+router.get('/super/qualified-teams', superController.getQualifiedTeams.bind(superController));
+
+// 检查是否可以生成Super(两年世界赛是否都结束)
+router.get('/super/check-eligibility', superController.checkEligibility.bind(superController));
+
+// 开始下一阶段
+router.post('/super/:superId/next-stage', superController.startNextStage.bind(superController));
+
+// 获取历史Super数据
+router.get('/super/historical', superController.getHistorical.bind(superController));
+
+// 获取Fighter组积分榜
+router.get('/super/:superId/fighter-standings', superController.getFighterStandings.bind(superController));
+
+// =================================================================
 // API信息路由
 // =================================================================
 
@@ -289,6 +318,7 @@ router.get('/', (req, res) => {
       playoffs: '/api/playoffs',
       msi: '/api/msi',
       worlds: '/api/worlds',
+      super: '/api/super',
       health: '/api/health'
     },
     documentation: 'Coming Soon'

@@ -286,6 +286,74 @@ export class PointsService {
       );
     }
   }
+
+  /**
+   * 获取两年积分总和排名（用于Super洲际赛）
+   */
+  async getTwoYearPointsRanking(season1Year: number, season2Year: number): Promise<any[]> {
+    try {
+      logger.info(`获取两年积分排名: ${season1Year}-${season2Year}`);
+
+      const query = `
+        WITH season1_points AS (
+          SELECT
+            ar.team_id,
+            COALESCE(ar.total_points, 0) as points
+          FROM annual_rankings ar
+          JOIN seasons s ON ar.season_id = s.id
+          WHERE s.year = $1
+        ),
+        season2_points AS (
+          SELECT
+            ar.team_id,
+            COALESCE(ar.total_points, 0) as points
+          FROM annual_rankings ar
+          JOIN seasons s ON ar.season_id = s.id
+          WHERE s.year = $2
+        )
+        SELECT
+          t.id as team_id,
+          t.name as team_name,
+          t.region_id,
+          r.name as region_name,
+          COALESCE(s1.points, 0) as season1_points,
+          COALESCE(s2.points, 0) as season2_points,
+          (COALESCE(s1.points, 0) + COALESCE(s2.points, 0)) as total_points,
+          ROW_NUMBER() OVER (
+            ORDER BY (COALESCE(s1.points, 0) + COALESCE(s2.points, 0)) DESC,
+                     COALESCE(s2.points, 0) DESC,
+                     COALESCE(s1.points, 0) DESC
+          ) as rank
+        FROM teams t
+        JOIN regions r ON r.id = t.region_id
+        LEFT JOIN season1_points s1 ON s1.team_id = t.id
+        LEFT JOIN season2_points s2 ON s2.team_id = t.id
+        WHERE (COALESCE(s1.points, 0) + COALESCE(s2.points, 0)) > 0
+        ORDER BY total_points DESC, season2_points DESC, season1_points DESC
+        LIMIT 40
+      `;
+
+      const result = await db.query(query, [season1Year, season2Year]);
+
+      return result.rows.map(row => ({
+        teamId: row.team_id,
+        teamName: row.team_name,
+        regionId: row.region_id,
+        regionName: row.region_name,
+        season1Points: parseInt(row.season1_points) || 0,
+        season2Points: parseInt(row.season2_points) || 0,
+        totalPoints: parseInt(row.total_points) || 0,
+        rank: parseInt(row.rank)
+      }));
+    } catch (error: any) {
+      logger.error('获取两年积分排名失败', { error: error.message, season1Year, season2Year });
+      throw new BusinessError(
+        ErrorCodes.INTERNAL_SERVER_ERROR,
+        '获取两年积分排名失败',
+        error.message
+      );
+    }
+  }
 }
 
 export const pointsService = new PointsService();

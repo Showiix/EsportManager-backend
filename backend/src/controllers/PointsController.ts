@@ -150,6 +150,35 @@ export class PointsController {
       });
     }
   }
+
+  /**
+   * GET /api/points/two-year/:season1Year/:season2Year
+   * 获取两年积分总和排名（用于Super洲际赛）
+   */
+  async getTwoYearPointsRanking(req: Request, res: Response) {
+    try {
+      const { season1Year, season2Year } = req.params;
+      
+      logger.info(`获取两年积分排名: ${season1Year}-${season2Year}`);
+      
+      const ranking = await pointsService.getTwoYearPointsRanking(
+        parseInt(season1Year),
+        parseInt(season2Year)
+      );
+
+      res.json({
+        success: true,
+        data: ranking
+      });
+    } catch (error: any) {
+      logger.error('获取两年积分排名失败', { error: error.message });
+      
+      res.status(500).json({
+        success: false,
+        message: '获取两年积分排名失败'
+      });
+    }
+  }
 }
 
 export const pointsController = new PointsController();

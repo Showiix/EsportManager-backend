@@ -53,5 +53,14 @@ router.get('/region/:regionId/:seasonYear', (req, res) =>
   pointsController.getRegionPointsRanking(req, res)
 );
 
+/**
+ * @route   GET /api/points/two-year/:season1Year/:season2Year
+ * @desc    获取两年积分总和排名（用于Super洲际赛）
+ * @access  Public
+ */
+router.get('/two-year/:season1Year/:season2Year', (req, res) => 
+  pointsController.getTwoYearPointsRanking(req, res)
+);
+
 export default router;
 

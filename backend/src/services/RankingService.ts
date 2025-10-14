@@ -529,22 +529,33 @@ export class RankingService {
    * 更新单支队伍的年度积分记录
    */
   private async updateTeamAnnualRanking(teamId: number, seasonId: string): Promise<void> {
+    // 获取赛季的年份
+    const seasonQuery = `SELECT year FROM seasons WHERE id = $1`;
+    const seasonResult = await db.query(seasonQuery, [seasonId]);
+    const seasonYear = seasonResult.rows[0]?.year;
+
+    if (!seasonYear) {
+      logger.error(`Season ${seasonId} not found`);
+      return;
+    }
+
     // 从 score_records 表中汇总该队伍的年度积分
+    // 使用 LEFT JOIN 以包含所有积分类型，包括季后赛积分
     const pointsQuery = `
       SELECT
         COALESCE(SUM(CASE WHEN c.type = 'spring' AND sr.point_type = 'regular' THEN sr.points ELSE 0 END), 0) as spring_points,
         COALESCE(SUM(CASE WHEN c.type = 'summer' AND sr.point_type = 'regular' THEN sr.points ELSE 0 END), 0) as summer_points,
-        COALESCE(SUM(CASE WHEN sr.point_type = 'playoff' THEN sr.points ELSE 0 END), 0) as playoff_points,
-        COALESCE(SUM(CASE WHEN c.type = 'msi' THEN sr.points ELSE 0 END), 0) as msi_points,
-        COALESCE(SUM(CASE WHEN c.type = 'worlds' THEN sr.points ELSE 0 END), 0) as worlds_points,
-        COALESCE(SUM(CASE WHEN c.type = 'intercontinental' THEN sr.points ELSE 0 END), 0) as intercontinental_points
+        COALESCE(SUM(CASE WHEN sr.point_type IN ('playoff', 'spring_playoff', 'summer_playoff') THEN sr.points ELSE 0 END), 0) as playoff_points,
+        COALESCE(SUM(CASE WHEN sr.point_type = 'msi' THEN sr.points ELSE 0 END), 0) as msi_points,
+        COALESCE(SUM(CASE WHEN sr.point_type = 'worlds' THEN sr.points ELSE 0 END), 0) as worlds_points,
+        COALESCE(SUM(CASE WHEN sr.point_type = 'intercontinental' THEN sr.points ELSE 0 END), 0) as intercontinental_points
       FROM score_records sr
-      JOIN competitions c ON sr.competition_id = c.id
+      LEFT JOIN competitions c ON sr.competition_id = c.id
       WHERE sr.team_id = $1
-        AND c.season_id = $2
+        AND sr.season_year = $2
     `;
 
-    const pointsResult = await db.query(pointsQuery, [teamId, seasonId]);
+    const pointsResult = await db.query(pointsQuery, [teamId, seasonYear]);
     const points = pointsResult.rows[0];
 
     // 计算总积分（不包含洲际赛）

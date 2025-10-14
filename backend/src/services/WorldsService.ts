@@ -1190,6 +1190,9 @@ export class WorldsService {
         SET is_quarter_seed = true, quarter_slot = $2
         WHERE id = $1
       `, [groupQualified[i].id, slot]);
+      // 同步更新内存中的数组
+      groupQualified[i].quarter_slot = slot;
+      groupQualified[i].is_quarter_seed = true;
     }
 
     // 4. 构建8强对阵（4场）
