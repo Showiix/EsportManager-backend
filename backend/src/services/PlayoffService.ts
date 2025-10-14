@@ -60,7 +60,7 @@ export class PlayoffService {
 
       // 1. 查询该赛区在指定赛季的所有季后赛对阵
       const bracketsQuery = `
-        SELECT pb.*
+        SELECT pb.*, c.season_id
         FROM playoff_brackets pb
         JOIN competitions c ON c.id = pb.competition_id
         WHERE pb.region_id = $1 AND c.season_id = $2
@@ -108,6 +108,7 @@ export class PlayoffService {
         brackets.push({
           id: bracketRow.id,
           competitionId: bracketRow.competition_id,
+          seasonId: bracketRow.season_id,
           regionId: bracketRow.region_id.toString(),
           regionName: bracketRow.region_name,
           competitionType: bracketRow.competition_type,
