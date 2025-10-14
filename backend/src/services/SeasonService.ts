@@ -496,10 +496,33 @@ export class SeasonService {
       const seasonNumber = parseInt(seasonCode.substring(1)); // S1 → 1, S2 → 2
       
       if (seasonNumber % 2 === 0) {
-        throw new BusinessError(
-          ErrorCodes.COMPETITION_NOT_ACTIVE,
-          `${seasonCode}赛季是Super杯赛年，需要先完成洲际赛`
+        // 偶数赛季，检查Super洲际赛是否完成
+        const superResult = await client.query(
+          `SELECT sb.id, sb.status, sb.season1_code, sb.season2_code
+           FROM super_brackets sb
+           WHERE sb.season2_code = $1`,
+          [seasonCode]
         );
+        
+        if (superResult.rows.length === 0) {
+          throw new BusinessError(
+            ErrorCodes.COMPETITION_NOT_ACTIVE,
+            `${seasonCode}赛季是Super杯赛年，但Super洲际赛尚未生成`
+          );
+        }
+        
+        if (superResult.rows[0].status !== 'completed') {
+          throw new BusinessError(
+            ErrorCodes.COMPETITION_NOT_ACTIVE,
+            `${seasonCode}赛季是Super杯赛年，需要先完成洲际赛`
+          );
+        }
+        
+        logger.info('Super洲际赛已完成，允许结束偶数赛季', {
+          seasonCode,
+          superBracketId: superResult.rows[0].id,
+          superStatus: superResult.rows[0].status
+        });
       }
       
       // 4. 标记当前赛季为已完成
