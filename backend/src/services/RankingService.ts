@@ -558,13 +558,14 @@ export class RankingService {
     const pointsResult = await db.query(pointsQuery, [teamId, seasonYear]);
     const points = pointsResult.rows[0];
 
-    // 计算总积分（不包含洲际赛）
+    // 计算总积分（包含洲际赛）
     const totalPoints =
       parseInt(points.spring_points) +
       parseInt(points.summer_points) +
       parseInt(points.playoff_points) +
       parseInt(points.msi_points) +
-      parseInt(points.worlds_points);
+      parseInt(points.worlds_points) +
+      parseInt(points.intercontinental_points);
 
     // 获取成就列表
     const achievements = await this.getTeamAchievements(teamId, seasonId);

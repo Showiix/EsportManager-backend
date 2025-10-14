@@ -9,6 +9,7 @@ import { playoffController } from '../controllers/PlayoffController';
 import { msiController } from '../controllers/MSIController';
 import { worldsController } from '../controllers/WorldsController';
 import { superController } from '../controllers/SuperController';
+import { clauchController } from '../controllers/ClauchController';
 import { seasonController } from '../controllers/SeasonController';
 import pointsRouter from './points';
 
@@ -299,6 +300,31 @@ router.get('/super/historical', superController.getHistorical.bind(superControll
 router.get('/super/:superId/fighter-standings', superController.getFighterStandings.bind(superController));
 
 // =================================================================
+// Clauch洲际赛路由
+// =================================================================
+
+// 生成Clauch对阵(世界赛结束后调用)
+router.post('/clauch/generate', clauchController.generateClauch.bind(clauchController));
+
+// 获取Clauch对阵信息
+router.get('/clauch/bracket', clauchController.getClauchBracket.bind(clauchController));
+
+// 模拟Clauch单场比赛(小组赛BO3或淘汰赛BO5)
+router.post('/clauch/simulate-match', clauchController.simulateClauchMatch.bind(clauchController));
+
+// 获取Clauch资格队伍(各赛区夏季赛常规赛前8名)
+router.get('/clauch/qualified-teams', clauchController.getQualifiedTeams.bind(clauchController));
+
+// 检查是否可以生成Clauch(世界赛是否结束)
+router.get('/clauch/check-eligibility', clauchController.checkClauchEligibility.bind(clauchController));
+
+// 获取小组积分榜
+router.get('/clauch/group-standings', clauchController.getGroupStandings.bind(clauchController));
+
+// 生成淘汰赛对阵
+router.post('/clauch/:id/generate-knockout', clauchController.generateKnockout.bind(clauchController));
+
+// =================================================================
 // API信息路由
 // =================================================================
 
@@ -319,6 +345,7 @@ router.get('/', (req, res) => {
       msi: '/api/msi',
       worlds: '/api/worlds',
       super: '/api/super',
+      clauch: '/api/clauch',
       health: '/api/health'
     },
     documentation: 'Coming Soon'

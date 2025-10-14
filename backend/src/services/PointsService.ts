@@ -19,6 +19,7 @@ export interface TeamPointsBreakdown {
   playoffPoints: number;
   msiPoints: number;
   worldsPoints: number;
+  intercontinentalPoints: number;
   pointDetails: Array<{
     pointType: string;
     points: number;
@@ -38,6 +39,7 @@ export interface SeasonPointsRanking {
   playoffPoints: number;
   msiPoints: number;
   worldsPoints: number;
+  intercontinentalPoints: number;
   rank: number;
 }
 
@@ -71,6 +73,7 @@ export class PointsService {
           playoffPoints: 0,
           msiPoints: 0,
           worldsPoints: 0,
+          intercontinentalPoints: 0,
           pointDetails: []
         };
       }
@@ -88,6 +91,7 @@ export class PointsService {
         playoffPoints: data.playoff_points || 0,
         msiPoints: data.msi_points || 0,
         worldsPoints: data.worlds_points || 0,
+        intercontinentalPoints: data.intercontinental_points || 0,
         pointDetails: data.point_details || []
       };
     } catch (error: any) {
@@ -122,6 +126,7 @@ export class PointsService {
           ts.playoff_points,
           ts.msi_points,
           ts.worlds_points,
+          ts.intercontinental_points,
           ROW_NUMBER() OVER (ORDER BY ts.total_points DESC, ts.team_id) as rank
         FROM team_statistics ts
         JOIN teams t ON ts.team_id = t.id
@@ -143,6 +148,7 @@ export class PointsService {
         playoffPoints: row.playoff_points || 0,
         msiPoints: row.msi_points || 0,
         worldsPoints: row.worlds_points || 0,
+        intercontinentalPoints: row.intercontinental_points || 0,
         rank: row.rank
       }));
     } catch (error: any) {
