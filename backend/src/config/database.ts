@@ -6,17 +6,28 @@ class DatabaseConnection {
   private pool: Pool;
 
   constructor() {
-    this.pool = new Pool({
-      host: config.database.host,
-      port: config.database.port,
-      user: config.database.username,
-      password: config.database.password,
-      database: config.database.database,
-      ssl: config.database.ssl ? { rejectUnauthorized: false } : false,
-      max: 20, // 最大连接数
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
+    // 优先使用 DATABASE_URL（Railway 提供）
+    const poolConfig = config.database.connectionString
+      ? {
+          connectionString: config.database.connectionString,
+          ssl: config.database.ssl ? { rejectUnauthorized: false } : false,
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 2000,
+        }
+      : {
+          host: config.database.host,
+          port: config.database.port,
+          user: config.database.username,
+          password: config.database.password,
+          database: config.database.database,
+          ssl: config.database.ssl ? { rejectUnauthorized: false } : false,
+          max: 20, // 最大连接数
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 2000,
+        };
+
+    this.pool = new Pool(poolConfig);
 
     // 连接事件处理
     this.pool.on('connect', () => {

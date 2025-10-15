@@ -6,14 +6,21 @@ class RedisConnection {
   private client: RedisClientType;
 
   constructor() {
-    this.client = createClient({
-      socket: {
-        host: config.redis.host,
-        port: config.redis.port,
-      },
-      password: config.redis.password,
-      database: config.redis.db,
-    });
+    // 优先使用 REDIS_URL（Railway 提供）
+    const clientConfig = config.redis.url
+      ? {
+          url: config.redis.url,
+        }
+      : {
+          socket: {
+            host: config.redis.host,
+            port: config.redis.port,
+          },
+          password: config.redis.password,
+          database: config.redis.db,
+        };
+
+    this.client = createClient(clientConfig);
 
     // Redis事件处理
     this.client.on('connect', () => {
