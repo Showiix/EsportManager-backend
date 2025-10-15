@@ -17,3 +17,11 @@ coverage/
 .yarn
 .pnpm-debug.log*
 .pnpm-store/
+
+# Documentation files
+Documents/
+*.md.backup
+*.md
+
+# SQL files
+*.sql

@@ -1232,6 +1232,12 @@ export class MSIService {
         teamsCount: distributions.length
       });
 
+      // 7. 更新年度积分排名
+      logger.info('开始更新年度积分排名', { seasonId: bracketData.season_id });
+      const { rankingService } = await import('./RankingService');
+      await rankingService.updateAnnualRankings(bracketData.season_id.toString());
+      logger.info('年度积分排名更新完成', { seasonId: bracketData.season_id });
+
     } catch (error: any) {
       logger.error('❌ MSI积分分配失败', {
         error: error.message,

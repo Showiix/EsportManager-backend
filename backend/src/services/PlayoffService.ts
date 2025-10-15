@@ -1048,6 +1048,12 @@ export class PlayoffService {
         totalPointsAwarded: distributions.reduce((sum, d) => sum + d.points, 0)
       });
 
+      // 7. 更新年度积分排名
+      logger.info('开始更新年度积分排名', { seasonId: bracketData.season_id });
+      const { rankingService } = await import('./RankingService');
+      await rankingService.updateAnnualRankings(bracketData.season_id.toString());
+      logger.info('年度积分排名更新完成', { seasonId: bracketData.season_id });
+
     } catch (error: any) {
       logger.error('❌ 季后赛积分分配失败', {
         error: error.message,
