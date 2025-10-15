@@ -1,0 +1,13 @@
+# SQL files
+*.sql
+
+# Documentation files
+*.md
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+

@@ -21,3 +21,7 @@ coverage/
 # Documentation files
 Documents/
 *.md.backup
+*.md
+
+# SQL files
+*.sql
